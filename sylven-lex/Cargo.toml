@@ -1,0 +1,10 @@
+[package]
+name = "sylven-lex"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Token kinds, lexer infrastructure, and trivia handling for the Sylven syntax engine"
+repository = "https://github.com/SkuldNorniern/sylven"
+
+[dependencies]
+sylven-text = { path = "../sylven-text" }
