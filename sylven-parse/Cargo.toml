@@ -1,0 +1,12 @@
+[package]
+name = "sylven-parse"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Recovery-first event parser driver for the Sylven syntax engine"
+repository = "https://github.com/SkuldNorniern/sylven"
+
+[dependencies]
+sylven-text = { path = "../sylven-text" }
+sylven-lex = { path = "../sylven-lex" }
+sylven-tree = { path = "../sylven-tree" }
