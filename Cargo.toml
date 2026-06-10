@@ -1,0 +1,17 @@
+[package]
+name = "sylven"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Recovery-first, lossless syntax engine for native editors"
+repository = "https://github.com/SkuldNorniern/sylven"
+
+[workspace]
+members = ["sylven-text", "sylven-lex", "sylven-tree", "sylven-parse"]
+resolver = "2"
+
+[dependencies]
+sylven-text = { path = "sylven-text" }
+sylven-lex = { path = "sylven-lex" }
+sylven-tree = { path = "sylven-tree" }
+sylven-parse = { path = "sylven-parse" }
