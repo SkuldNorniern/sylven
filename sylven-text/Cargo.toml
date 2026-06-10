@@ -1,0 +1,9 @@
+[package]
+name = "sylven-text"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Text positions, ranges, and snapshots for the Sylven syntax engine"
+repository = "https://github.com/SkuldNorniern/sylven"
+
+[dependencies]
