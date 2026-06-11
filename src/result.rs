@@ -43,6 +43,8 @@ pub enum SymbolKind {
     Macro,
     /// A `[section]` / `[[array of tables]]` header (TOML, INI, …).
     Section,
+    /// An ATX heading (`#` … `######`) in Markdown.
+    Heading,
 }
 
 impl SymbolKind {
@@ -59,6 +61,7 @@ impl SymbolKind {
             SymbolKind::TypeAlias => "type",
             SymbolKind::Macro => "macro",
             SymbolKind::Section => "section",
+            SymbolKind::Heading => "heading",
         }
     }
 }

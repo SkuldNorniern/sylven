@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use sylven_text::TextSnapshot;
 
+use crate::lang::markdown::MarkdownLanguage;
 use crate::lang::mini_oxygen::MiniOxygen;
 use crate::lang::rust::RustLanguage;
 use crate::lang::toml::TomlLanguage;
@@ -24,6 +25,7 @@ impl SyntaxEngine {
         registry.register(Arc::new(MiniOxygen));
         registry.register(Arc::new(RustLanguage));
         registry.register(Arc::new(TomlLanguage));
+        registry.register(Arc::new(MarkdownLanguage));
         SyntaxEngine { registry }
     }
 
