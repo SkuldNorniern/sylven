@@ -217,9 +217,7 @@ fn lex_one(bytes: &[u8], text: &str, pos: &mut usize) -> SyntaxKind {
     // Identifier / keyword / macro
     if b.is_ascii_alphabetic() || b == b'_' {
         let start = *pos;
-        while *pos < bytes.len()
-            && (bytes[*pos].is_ascii_alphanumeric() || bytes[*pos] == b'_')
-        {
+        while *pos < bytes.len() && (bytes[*pos].is_ascii_alphanumeric() || bytes[*pos] == b'_') {
             *pos += 1;
         }
         let word = &text[start..*pos];
@@ -239,16 +237,17 @@ fn lex_one(bytes: &[u8], text: &str, pos: &mut usize) -> SyntaxKind {
     // Operators
     if matches!(
         b,
-        b'+' | b'-' | b'*' | b'%' | b'=' | b'!' | b'<' | b'>' | b'&' | b'|' | b'^' | b'~'
-            | b'@'
+        b'+' | b'-' | b'*' | b'%' | b'=' | b'!' | b'<' | b'>' | b'&' | b'|' | b'^' | b'~' | b'@'
     ) {
         *pos += 1;
         return RustKind::Operator.into();
     }
 
     // Punctuation
-    if matches!(b, b'{' | b'}' | b'(' | b')' | b'[' | b']' | b';' | b':' | b',' | b'.' | b'?')
-    {
+    if matches!(
+        b,
+        b'{' | b'}' | b'(' | b')' | b'[' | b']' | b';' | b':' | b',' | b'.' | b'?'
+    ) {
         *pos += 1;
         return RustKind::Punctuation.into();
     }
@@ -365,9 +364,7 @@ fn lex_quote(bytes: &[u8], pos: &mut usize) -> SyntaxKind {
 
     // Lifetime: starts with alphabetic or `_`, not followed by `'`
     if next.is_ascii_alphabetic() || next == b'_' {
-        while *pos < bytes.len()
-            && (bytes[*pos].is_ascii_alphanumeric() || bytes[*pos] == b'_')
-        {
+        while *pos < bytes.len() && (bytes[*pos].is_ascii_alphanumeric() || bytes[*pos] == b'_') {
             *pos += 1;
         }
         // If the identifier is followed by `'` it's a char literal like 'ab' (invalid Rust,
@@ -395,8 +392,7 @@ fn lex_number(bytes: &[u8], pos: &mut usize) -> SyntaxKind {
         match bytes.get(*pos + 1) {
             Some(&b'x') | Some(&b'X') => {
                 *pos += 2;
-                while *pos < bytes.len()
-                    && (bytes[*pos].is_ascii_hexdigit() || bytes[*pos] == b'_')
+                while *pos < bytes.len() && (bytes[*pos].is_ascii_hexdigit() || bytes[*pos] == b'_')
                 {
                     *pos += 1;
                 }
@@ -406,7 +402,9 @@ fn lex_number(bytes: &[u8], pos: &mut usize) -> SyntaxKind {
             }
             Some(&b'b') | Some(&b'B') => {
                 *pos += 2;
-                while *pos < bytes.len() && (bytes[*pos] == b'0' || bytes[*pos] == b'1' || bytes[*pos] == b'_') {
+                while *pos < bytes.len()
+                    && (bytes[*pos] == b'0' || bytes[*pos] == b'1' || bytes[*pos] == b'_')
+                {
                     *pos += 1;
                 }
                 lex_num_suffix(bytes, pos);
@@ -430,7 +428,7 @@ fn lex_number(bytes: &[u8], pos: &mut usize) -> SyntaxKind {
         *pos += 1;
     }
     // Optional fractional part / exponent
-    if bytes.get(*pos) == Some(&b'.') && bytes.get(*pos + 1).map_or(false, |b| b.is_ascii_digit()) {
+    if bytes.get(*pos) == Some(&b'.') && bytes.get(*pos + 1).is_some_and(|b| b.is_ascii_digit()) {
         *pos += 1;
         while *pos < bytes.len() && (bytes[*pos].is_ascii_digit() || bytes[*pos] == b'_') {
             *pos += 1;
@@ -466,8 +464,8 @@ fn classify_ident(word: &str, is_call: bool) -> RustKind {
 
         "fn" | "let" | "mut" | "const" | "static" | "struct" | "enum" | "union" | "trait"
         | "impl" | "type" | "where" | "pub" | "use" | "mod" | "extern" | "crate" | "super"
-        | "self" | "Self" | "in" | "as" | "move" | "async" | "await" | "dyn" | "unsafe"
-        | "ref" | "box" | "pub(crate)" => RustKind::Keyword,
+        | "self" | "Self" | "in" | "as" | "move" | "async" | "await" | "dyn" | "unsafe" | "ref"
+        | "box" | "pub(crate)" => RustKind::Keyword,
 
         "bool" | "char" | "str" | "i8" | "i16" | "i32" | "i64" | "i128" | "isize" | "u8"
         | "u16" | "u32" | "u64" | "u128" | "usize" | "f32" | "f64" => RustKind::PrimitiveType,
@@ -483,7 +481,7 @@ fn classify_ident(word: &str, is_call: bool) -> RustKind {
                 return RustKind::FunctionIdent;
             }
             // PascalCase → type-like ident
-            if word.len() > 1 && word.chars().next().map_or(false, |c| c.is_uppercase()) {
+            if word.len() > 1 && word.chars().next().is_some_and(|c| c.is_uppercase()) {
                 RustKind::PascalIdent
             } else {
                 RustKind::Ident
@@ -510,14 +508,6 @@ fn utf8_len(first: u8) -> usize {
 mod tests {
     use super::*;
 
-    fn kinds(text: &str) -> Vec<SyntaxKind> {
-        lex_rust(text)
-            .as_slice()
-            .iter()
-            .map(|t| t.kind)
-            .collect()
-    }
-
     fn non_trivia_kinds(text: &str) -> Vec<SyntaxKind> {
         lex_rust(text)
             .as_slice()
@@ -527,7 +517,7 @@ mod tests {
             .collect()
     }
 
-    fn token_texts<'a>(text: &'a str) -> Vec<&'a str> {
+    fn token_texts(text: &str) -> Vec<&str> {
         lex_rust(text)
             .as_slice()
             .iter()
@@ -590,7 +580,10 @@ mod tests {
     #[test]
     fn lifetime() {
         let ks = non_trivia_kinds("'a 'static");
-        assert_eq!(ks, vec![RustKind::Lifetime.into(), RustKind::Lifetime.into()]);
+        assert_eq!(
+            ks,
+            vec![RustKind::Lifetime.into(), RustKind::Lifetime.into()]
+        );
     }
 
     #[test]
@@ -615,7 +608,10 @@ mod tests {
     #[test]
     fn macro_ident() {
         let ks = non_trivia_kinds("println! vec!");
-        assert_eq!(ks, vec![RustKind::MacroIdent.into(), RustKind::MacroIdent.into()]);
+        assert_eq!(
+            ks,
+            vec![RustKind::MacroIdent.into(), RustKind::MacroIdent.into()]
+        );
     }
 
     #[test]

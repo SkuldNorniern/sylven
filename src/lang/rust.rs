@@ -42,7 +42,11 @@ impl LanguagePlugin for RustLanguage {
 
         let (tree, errors) = build_tree(tokens, text, events);
         let features = derive_features(tokens, text);
-        ParseResult { tree, errors, features }
+        ParseResult {
+            tree,
+            errors,
+            features,
+        }
     }
 }
 
@@ -121,7 +125,10 @@ fn derive_highlights(tokens: &[sylven_lex::Token], _source: &str) -> Vec<Highlig
         .iter()
         .filter_map(|tok| {
             let kind = rust_kind_to_highlight(tok.kind)?;
-            Some(Highlight { range: tok.range, kind })
+            Some(Highlight {
+                range: tok.range,
+                kind,
+            })
         })
         .collect()
 }
@@ -147,13 +154,13 @@ fn derive_folds(tokens: &[sylven_lex::Token], source: &str) -> Vec<TextRange> {
         let ch = source.as_bytes()[s];
         if ch == b'{' {
             stack.push(tok.range.start());
-        } else if ch == b'}' {
-            if let Some(open_start) = stack.pop() {
-                let open_line = line_index.line_col(open_start).line;
-                let close_line = line_index.line_col(tok.range.start()).line;
-                if close_line > open_line {
-                    folds.push(TextRange::new(open_start, tok.range.end()));
-                }
+        } else if ch == b'}'
+            && let Some(open_start) = stack.pop()
+        {
+            let open_line = line_index.line_col(open_start).line;
+            let close_line = line_index.line_col(tok.range.start()).line;
+            if close_line > open_line {
+                folds.push(TextRange::new(open_start, tok.range.end()));
             }
         }
     }
@@ -177,10 +184,7 @@ fn is_name_token(k: SyntaxKind) -> bool {
 }
 
 fn derive_symbols(tokens: &[sylven_lex::Token], source: &str) -> Vec<SymbolInfo> {
-    let sig: Vec<&sylven_lex::Token> = tokens
-        .iter()
-        .filter(|t| is_significant(t.kind))
-        .collect();
+    let sig: Vec<&sylven_lex::Token> = tokens.iter().filter(|t| is_significant(t.kind)).collect();
 
     let mut symbols = Vec::new();
     let mut i = 0;
@@ -202,31 +206,27 @@ fn derive_symbols(tokens: &[sylven_lex::Token], source: &str) -> Vec<SymbolInfo>
                 "type" => Some(SymbolKind::TypeAlias),
                 _ => None,
             }
-        } else if tok.kind == RustKind::MacroIdent.to_syntax()
-            && text == "macro_rules!"
-        {
+        } else if tok.kind == RustKind::MacroIdent.to_syntax() && text == "macro_rules!" {
             Some(SymbolKind::Macro)
         } else {
             None
         };
 
-        if let Some(kind) = sym_kind {
-            // For `impl`, the next token is the type name — could be PascalIdent,
-            // StdType, or Ident. Accept any name-like token.
-            // For `macro_rules!`, the next token is the macro name (Ident).
-            if let Some(name_tok) = sig.get(i + 1).copied() {
-                if is_name_token(name_tok.kind) {
-                    let name = token_text(name_tok, source).to_string();
-                    symbols.push(SymbolInfo {
-                        name,
-                        name_range: name_tok.range,
-                        decl_range: tok.range,
-                        kind,
-                    });
-                    i += 2;
-                    continue;
-                }
-            }
+        // For `impl`, next token is type name (PascalIdent/StdType/Ident).
+        // For `macro_rules!`, next token is the macro name (Ident).
+        if let Some(kind) = sym_kind
+            && let Some(name_tok) = sig.get(i + 1).copied()
+            && is_name_token(name_tok.kind)
+        {
+            let name = token_text(name_tok, source).to_string();
+            symbols.push(SymbolInfo {
+                name,
+                name_range: name_tok.range,
+                decl_range: tok.range,
+                kind,
+            });
+            i += 2;
+            continue;
         }
         i += 1;
     }
@@ -310,13 +310,21 @@ mod tests {
     #[test]
     fn highlights_contain_keyword() {
         let f = features("fn main() {}");
-        assert!(f.highlights.iter().any(|h| h.kind == HighlightKind::Keyword));
+        assert!(
+            f.highlights
+                .iter()
+                .any(|h| h.kind == HighlightKind::Keyword)
+        );
     }
 
     #[test]
     fn highlights_contain_function() {
         let f = features("fn main() {}");
-        assert!(f.highlights.iter().any(|h| h.kind == HighlightKind::Function));
+        assert!(
+            f.highlights
+                .iter()
+                .any(|h| h.kind == HighlightKind::Function)
+        );
     }
 
     #[test]
@@ -336,7 +344,9 @@ mod tests {
     fn symbol_function() {
         let f = features("fn my_func() {}");
         assert!(
-            f.symbols.iter().any(|s| s.name == "my_func" && s.kind == SymbolKind::Function),
+            f.symbols
+                .iter()
+                .any(|s| s.name == "my_func" && s.kind == SymbolKind::Function),
             "expected function symbol 'my_func', got {:?}",
             f.symbols
         );
@@ -345,31 +355,51 @@ mod tests {
     #[test]
     fn symbol_struct() {
         let f = features("struct Foo {}");
-        assert!(f.symbols.iter().any(|s| s.name == "Foo" && s.kind == SymbolKind::Struct));
+        assert!(
+            f.symbols
+                .iter()
+                .any(|s| s.name == "Foo" && s.kind == SymbolKind::Struct)
+        );
     }
 
     #[test]
     fn symbol_enum() {
         let f = features("enum Direction { North, South }");
-        assert!(f.symbols.iter().any(|s| s.name == "Direction" && s.kind == SymbolKind::Enum));
+        assert!(
+            f.symbols
+                .iter()
+                .any(|s| s.name == "Direction" && s.kind == SymbolKind::Enum)
+        );
     }
 
     #[test]
     fn symbol_trait() {
         let f = features("trait Display {}");
-        assert!(f.symbols.iter().any(|s| s.name == "Display" && s.kind == SymbolKind::Trait));
+        assert!(
+            f.symbols
+                .iter()
+                .any(|s| s.name == "Display" && s.kind == SymbolKind::Trait)
+        );
     }
 
     #[test]
     fn symbol_impl() {
         let f = features("impl Foo {}");
-        assert!(f.symbols.iter().any(|s| s.name == "Foo" && s.kind == SymbolKind::Impl));
+        assert!(
+            f.symbols
+                .iter()
+                .any(|s| s.name == "Foo" && s.kind == SymbolKind::Impl)
+        );
     }
 
     #[test]
     fn symbol_mod() {
         let f = features("mod utils {}");
-        assert!(f.symbols.iter().any(|s| s.name == "utils" && s.kind == SymbolKind::Module));
+        assert!(
+            f.symbols
+                .iter()
+                .any(|s| s.name == "utils" && s.kind == SymbolKind::Module)
+        );
     }
 
     #[test]
