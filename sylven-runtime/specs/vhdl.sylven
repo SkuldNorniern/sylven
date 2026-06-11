@@ -1,0 +1,77 @@
+language {
+  id "vhdl"
+  extensions [".vhd", ".vhdl"]
+  comment.line "--"
+}
+
+tokens {
+  keyword [
+    "architecture", "begin", "end", "entity", "is",
+    "port", "generic", "map",
+    "in", "out", "inout", "buffer", "linkage",
+    "signal", "variable", "constant", "shared",
+    "type", "subtype", "record", "array", "of", "range", "downto", "to",
+    "process", "wait", "until", "on",
+    "if", "then", "else", "elsif", "case", "when", "others",
+    "for", "loop", "while", "next", "exit", "return",
+    "function", "procedure", "package", "body",
+    "library", "use", "all",
+    "component", "configuration", "block", "generate",
+    "with", "select",
+    "after", "transport", "inertial", "reject",
+    "report", "severity", "assert", "null", "open",
+    "and", "or", "not", "nand", "nor", "xor", "xnor",
+    "mod", "rem", "abs",
+    "new", "alias", "attribute", "file", "access", "group",
+    "impure", "pure", "guarded", "disconnect", "units", "label",
+    "literal", "protected"
+  ]
+  prim.type [
+    "std_logic", "std_logic_vector", "std_ulogic", "std_ulogic_vector",
+    "bit", "bit_vector", "integer", "natural", "positive", "real",
+    "boolean", "character", "string", "signed", "unsigned", "time"
+  ]
+  bool.lit ["true", "false"]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  line.comment  "--" to newline
+  whitespace    /\s+/ trivia
+  ":="  assign
+  "=>"  arrow
+  "/="  ne
+  "<="  le
+  ">="  ge
+  "**"  power
+  "("   lparen
+  ")"   rparen
+  "+"   plus
+  "-"   minus
+  "*"   star
+  "/"   slash
+  "&"   amp
+  "<"   lt
+  ">"   gt
+  "="   eq
+  "."   dot
+  ":"   colon
+  ";"   semicolon
+  ","   comma
+  "|"   pipe
+  "'"   tick
+}
+
+highlight {
+  token keyword       -> keyword
+  token prim.type     -> type
+  token bool.lit      -> keyword
+  token string        -> string
+  token float         -> number
+  token int           -> number
+  token line.comment  -> comment
+}
+
+fold {
+  Block when multiline
+}

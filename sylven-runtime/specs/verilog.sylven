@@ -1,0 +1,90 @@
+language {
+  id "verilog"
+  extensions [".v", ".vh"]
+  comment.line "//"
+  comment.block "/*" "*/"
+}
+
+tokens {
+  keyword [
+    "module", "endmodule", "input", "output", "inout",
+    "parameter", "localparam", "defparam", "genvar", "generate", "endgenerate",
+    "assign", "always", "initial", "begin", "end",
+    "if", "else", "case", "casex", "casez", "endcase", "default",
+    "for", "while", "repeat", "forever",
+    "function", "endfunction", "task", "endtask", "automatic",
+    "posedge", "negedge",
+    "and", "or", "not", "nand", "nor", "xor", "xnor",
+    "buf", "bufif0", "bufif1", "notif0", "notif1",
+    "fork", "join", "disable", "force", "release", "deassign",
+    "primitive", "endprimitive", "table", "endtable",
+    "specify", "endspecify"
+  ]
+  prim.type [
+    "wire", "reg", "tri", "tri0", "tri1", "wand", "wor",
+    "supply0", "supply1", "integer", "real", "realtime", "time", "signed"
+  ]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  line.comment  "//" to newline
+  block.comment "/*" to "*/"
+  whitespace    /\s+/ trivia
+  "==="  caseeq
+  "!=="  caseneq
+  "<<<"  asl
+  ">>>"  asr
+  "=="   eqeq
+  "!="   ne
+  "<<"   shl
+  ">>"   shr
+  "<="   le
+  ">="   ge
+  "&&"   andand
+  "||"   oror
+  "->"   arrow
+  "**"   power
+  "("    lparen
+  ")"    rparen
+  "{"    lbrace
+  "}"    rbrace
+  "["    lbracket
+  "]"    rbracket
+  "+"    plus
+  "-"    minus
+  "*"    star
+  "/"    slash
+  "%"    percent
+  "&"    amp
+  "|"    pipe
+  "^"    caret
+  "~"    tilde
+  "!"    bang
+  "<"    lt
+  ">"    gt
+  "="    eq
+  "?"    question
+  "."    dot
+  ":"    colon
+  ";"    semicolon
+  ","    comma
+  "@"    at
+  "#"    hash
+  "$"    dollar
+  "'"    tick
+}
+
+highlight {
+  token keyword       -> keyword
+  token prim.type     -> type
+  token string        -> string
+  token float         -> number
+  token int           -> number
+  token line.comment  -> comment
+  token block.comment -> comment
+}
+
+fold {
+  Block when multiline
+}

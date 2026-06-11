@@ -1,0 +1,118 @@
+language {
+  id "systemverilog"
+  extensions [".sv", ".svh"]
+  comment.line "//"
+  comment.block "/*" "*/"
+}
+
+tokens {
+  keyword [
+    "module", "endmodule", "interface", "endinterface", "modport",
+    "package", "endpackage", "import", "export",
+    "program", "endprogram",
+    "class", "endclass", "extends", "implements",
+    "input", "output", "inout", "ref",
+    "parameter", "localparam", "defparam", "genvar", "generate", "endgenerate",
+    "typedef", "enum", "struct", "union", "packed", "tagged",
+    "assign", "always", "always_comb", "always_ff", "always_latch", "initial", "final",
+    "begin", "end",
+    "if", "else", "case", "casex", "casez", "endcase", "default",
+    "for", "foreach", "while", "do", "repeat", "forever",
+    "function", "endfunction", "task", "endtask", "automatic", "return",
+    "break", "continue",
+    "posedge", "negedge", "edge",
+    "and", "or", "not", "nand", "nor", "xor", "xnor",
+    "buf", "bufif0", "bufif1", "notif0", "notif1",
+    "fork", "join", "join_any", "join_none", "disable", "force", "release", "deassign",
+    "clocking", "endclocking", "property", "endproperty", "sequence", "endsequence",
+    "assert", "assume", "cover", "covergroup", "endgroup", "coverpoint", "cross", "bins", "ignore_bins",
+    "constraint", "rand", "randc",
+    "unique", "priority", "inside", "dist", "iff", "with", "matches",
+    "alias", "wildcard", "bind",
+    "virtual", "static", "extern", "pure", "protected", "local",
+    "this", "super", "new", "null"
+  ]
+  prim.type [
+    "wire", "reg", "logic", "bit", "byte", "shortint", "longint", "int",
+    "integer", "real", "realtime", "shortreal", "time", "string", "void",
+    "signed", "unsigned", "tri", "tri0", "tri1"
+  ]
+  bool.lit ["true", "false"]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  line.comment  "//" to newline
+  block.comment "/*" to "*/"
+  whitespace    /\s+/ trivia
+  "==="  caseeq
+  "!=="  caseneq
+  "==?"  wildeq
+  "!=?"  wildneq
+  "<<<"  asl
+  ">>>"  asr
+  "<<="  shleq
+  ">>="  shreq
+  "->>"  nbarrow
+  "<->"  iff
+  "=="   eqeq
+  "!="   ne
+  "<<"   shl
+  ">>"   shr
+  "<="   le
+  ">="   ge
+  "&&"   andand
+  "||"   oror
+  "->"   arrow
+  "**"   power
+  "+="   pluseq
+  "-="   minuseq
+  "*="   stareq
+  "/="   slasheq
+  "++"   inc
+  "--"   dec
+  "::"   coloncolon
+  "("    lparen
+  ")"    rparen
+  "{"    lbrace
+  "}"    rbrace
+  "["    lbracket
+  "]"    rbracket
+  "+"    plus
+  "-"    minus
+  "*"    star
+  "/"    slash
+  "%"    percent
+  "&"    amp
+  "|"    pipe
+  "^"    caret
+  "~"    tilde
+  "!"    bang
+  "<"    lt
+  ">"    gt
+  "="    eq
+  "?"    question
+  "."    dot
+  ":"    colon
+  ";"    semicolon
+  ","    comma
+  "@"    at
+  "#"    hash
+  "$"    dollar
+  "'"    tick
+}
+
+highlight {
+  token keyword       -> keyword
+  token prim.type     -> type
+  token bool.lit      -> keyword
+  token string        -> string
+  token float         -> number
+  token int           -> number
+  token line.comment  -> comment
+  token block.comment -> comment
+}
+
+fold {
+  Block when multiline
+}

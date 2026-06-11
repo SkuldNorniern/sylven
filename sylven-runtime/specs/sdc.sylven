@@ -1,0 +1,67 @@
+language {
+  id "sdc"
+  extensions [".sdc", ".xdc"]
+  comment.line "#"
+}
+
+tokens {
+  keyword [
+    "create_clock", "create_generated_clock", "set_clock_groups",
+    "set_clock_latency", "set_clock_uncertainty", "set_clock_transition",
+    "set_input_delay", "set_output_delay",
+    "set_false_path", "set_multicycle_path", "set_max_delay", "set_min_delay",
+    "set_disable_timing", "set_case_analysis", "set_drive", "set_load",
+    "set_property", "set_units", "set_operating_conditions",
+    "get_ports", "get_pins", "get_cells", "get_nets", "get_clocks", "get_lib_cells",
+    "all_inputs", "all_outputs", "all_registers", "all_clocks",
+    "current_design", "current_instance",
+    "create_voltage_area", "create_partition",
+    "if", "else", "elseif", "foreach", "for", "while",
+    "proc", "return", "set", "expr", "puts", "source",
+    "namespace", "variable", "global", "incr", "switch", "default",
+    "break", "continue"
+  ]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  line.comment  "#" to newline
+  whitespace    /\s+/ trivia
+  "=="  eqeq
+  "!="  ne
+  "<="  le
+  ">="  ge
+  "&&"  andand
+  "||"  oror
+  "("   lparen
+  ")"   rparen
+  "{"   lbrace
+  "}"   rbrace
+  "["   lbracket
+  "]"   rbracket
+  "+"   plus
+  "-"   minus
+  "*"   star
+  "/"   slash
+  "<"   lt
+  ">"   gt
+  "="   eq
+  "."   dot
+  ":"   colon
+  ";"   semicolon
+  ","   comma
+  "!"   bang
+  "$"   dollar
+}
+
+highlight {
+  token keyword       -> keyword
+  token string        -> string
+  token float         -> number
+  token int           -> number
+  token line.comment  -> comment
+}
+
+fold {
+  Block when multiline
+}

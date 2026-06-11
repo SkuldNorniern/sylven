@@ -1,0 +1,92 @@
+language {
+  id "bsv"
+  extensions [".bsv"]
+  comment.line "//"
+  comment.block "/*" "*/"
+}
+
+tokens {
+  keyword [
+    "package", "endpackage", "import", "export",
+    "module", "endmodule",
+    "interface", "endinterface", "method", "endmethod",
+    "rule", "endrule", "rules", "endrules",
+    "action", "endaction", "actionvalue", "endactionvalue",
+    "function", "endfunction",
+    "typedef", "typeclass", "endtypeclass", "instance", "endinstance",
+    "struct", "union", "tagged", "enum", "deriving", "provisos",
+    "if", "else", "case", "endcase", "for", "while", "return",
+    "let", "match", "matches", "default",
+    "begin", "end",
+    "valueOf", "valueof", "numeric", "type",
+    "input_clock", "default_clock", "default_reset",
+    "reset_by", "clocked_by", "parameter"
+  ]
+  prim.type [
+    "Bit", "Int", "UInt", "Bool", "Action", "ActionValue",
+    "Integer", "Real", "String", "Void", "Reg", "Wire", "RWire",
+    "PulseWire", "FIFO", "FIFOF", "Maybe", "Vector", "Tuple2", "Tuple3"
+  ]
+  bool.lit ["True", "False"]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  line.comment  "//" to newline
+  block.comment "/*" to "*/"
+  whitespace    /\s+/ trivia
+  "=="  eqeq
+  "!="  ne
+  "<="  le
+  ">="  ge
+  "&&"  andand
+  "||"  oror
+  "<-"  bind
+  "->"  arrow
+  "++"  concat
+  "::"  coloncolon
+  "**"  power
+  "("   lparen
+  ")"   rparen
+  "{"   lbrace
+  "}"   rbrace
+  "["   lbracket
+  "]"   rbracket
+  "+"   plus
+  "-"   minus
+  "*"   star
+  "/"   slash
+  "%"   percent
+  "&"   amp
+  "|"   pipe
+  "^"   caret
+  "~"   tilde
+  "!"   bang
+  "<"   lt
+  ">"   gt
+  "="   eq
+  "?"   question
+  "."   dot
+  ":"   colon
+  ";"   semicolon
+  ","   comma
+  "@"   at
+  "#"   hash
+  "$"   dollar
+  "'"   tick
+}
+
+highlight {
+  token keyword       -> keyword
+  token prim.type     -> type
+  token bool.lit      -> keyword
+  token string        -> string
+  token float         -> number
+  token int           -> number
+  token line.comment  -> comment
+  token block.comment -> comment
+}
+
+fold {
+  Block when multiline
+}

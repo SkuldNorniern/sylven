@@ -1,0 +1,81 @@
+language {
+  id "bh"
+  extensions [".bs"]
+  comment.line "--"
+  comment.block "{-" "-}"
+}
+
+tokens {
+  keyword [
+    "module", "where", "import", "qualified", "as", "hiding",
+    "data", "type", "newtype", "class", "instance", "deriving",
+    "if", "then", "else", "case", "of",
+    "let", "in", "do",
+    "interface", "method", "rule", "rules", "action", "actionvalue",
+    "provisos", "numeric"
+  ]
+  prim.type [
+    "Bit", "Int", "UInt", "Bool", "Action", "ActionValue",
+    "Integer", "Real", "String", "Char", "Void", "Reg", "Module",
+    "Maybe", "Vector"
+  ]
+  bool.lit ["True", "False"]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  line.comment  "--" to newline
+  block.comment "{-" to "-}"
+  whitespace    /\s+/ trivia
+  ">>="  bind
+  "::"   coloncolon
+  "->"   arrow
+  "<-"   larrow
+  "=>"   fatarrow
+  "=="   eqeq
+  "/="   ne
+  "<="   le
+  ">="   ge
+  "&&"   andand
+  "||"   oror
+  "++"   concat
+  ">>"   seqbind
+  "("    lparen
+  ")"    rparen
+  "{"    lbrace
+  "}"    rbrace
+  "["    lbracket
+  "]"    rbracket
+  "+"    plus
+  "-"    minus
+  "*"    star
+  "/"    slash
+  "\\"   backslash
+  "<"    lt
+  ">"    gt
+  "="    eq
+  "."    dot
+  ":"    colon
+  ";"    semicolon
+  ","    comma
+  "@"    at
+  "!"    bang
+  "|"    pipe
+  "$"    dollar
+  "'"    tick
+}
+
+highlight {
+  token keyword       -> keyword
+  token prim.type     -> type
+  token bool.lit      -> keyword
+  token string        -> string
+  token float         -> number
+  token int           -> number
+  token line.comment  -> comment
+  token block.comment -> comment
+}
+
+fold {
+  Block when multiline
+}
