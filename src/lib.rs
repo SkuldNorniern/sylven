@@ -21,6 +21,7 @@ mod engine;
 mod language;
 mod registry;
 mod result;
+mod selection;
 mod session;
 
 pub mod lang;
@@ -30,5 +31,6 @@ pub use engine::SyntaxEngine;
 pub use language::{LanguageId, LanguagePlugin};
 pub use registry::LanguageRegistry;
 pub use result::{Highlight, HighlightKind, ParseResult, SymbolInfo, SymbolKind, SyntaxFeatures};
+pub use selection::expand_selection;
 pub use session::SyntaxSession;
 pub use sylven_text::{DocumentId, RevisionId, TextSnapshot};
