@@ -18,6 +18,8 @@ pub enum HighlightKind {
     Attribute,
     Macro,
     Lifetime,
+    /// A `[section]` / `[[array of tables]]` header (TOML, INI, …).
+    SectionHeader,
 }
 
 /// A single highlighted region with its semantic kind.
@@ -39,6 +41,8 @@ pub enum SymbolKind {
     Constant,
     TypeAlias,
     Macro,
+    /// A `[section]` / `[[array of tables]]` header (TOML, INI, …).
+    Section,
 }
 
 impl SymbolKind {
@@ -54,6 +58,7 @@ impl SymbolKind {
             SymbolKind::Constant => "const",
             SymbolKind::TypeAlias => "type",
             SymbolKind::Macro => "macro",
+            SymbolKind::Section => "section",
         }
     }
 }
