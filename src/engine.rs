@@ -7,6 +7,7 @@ use crate::lang::markdown::MarkdownLanguage;
 use crate::lang::mini_oxygen::MiniOxygen;
 use crate::lang::rust::RustLanguage;
 use crate::lang::toml::TomlLanguage;
+use crate::lang::yaml::YamlLanguage;
 use crate::{LanguageId, LanguageRegistry, ParseResult};
 
 /// Entry point to the syntax engine: a [`LanguageRegistry`] plus the ability
@@ -28,6 +29,7 @@ impl SyntaxEngine {
         registry.register(Arc::new(TomlLanguage));
         registry.register(Arc::new(MarkdownLanguage));
         registry.register(Arc::new(JsonLanguage));
+        registry.register(Arc::new(YamlLanguage));
         SyntaxEngine { registry }
     }
 

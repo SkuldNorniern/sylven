@@ -10,3 +10,4 @@ pub mod markdown;
 pub mod mini_oxygen;
 pub mod rust;
 pub mod toml;
+pub mod yaml;
