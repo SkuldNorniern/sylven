@@ -33,6 +33,12 @@ impl SyntaxEngine {
         SyntaxEngine { registry }
     }
 
+    /// Create an engine from a pre-built registry. Useful in tests that need
+    /// only a subset of plugins.
+    pub fn with_registry(registry: LanguageRegistry) -> SyntaxEngine {
+        SyntaxEngine { registry }
+    }
+
     pub fn registry(&self) -> &LanguageRegistry {
         &self.registry
     }
