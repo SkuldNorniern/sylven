@@ -7,7 +7,7 @@ description = "Recovery-first, lossless syntax engine for native editors"
 repository = "https://github.com/SkuldNorniern/sylven"
 
 [workspace]
-members = ["sylven-text", "sylven-lex", "sylven-tree", "sylven-parse"]
+members = ["sylven-text", "sylven-lex", "sylven-tree", "sylven-parse", "sylven-dsl"]
 resolver = "2"
 
 [dependencies]
