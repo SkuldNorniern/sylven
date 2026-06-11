@@ -7,11 +7,12 @@ use crate::{RuntimePlugin, compile};
 const RUST_SPEC: &str = include_str!("../specs/rust.sylven");
 const C_SPEC: &str = include_str!("../specs/c.sylven");
 const PYTHON_SPEC: &str = include_str!("../specs/python.sylven");
+const OXYGEN_SPEC: &str = include_str!("../specs/oxygen.sylven");
 
-/// Register the bundled DSL-based language plugins (Rust, C, Python) into
-/// `registry`. Existing plugins with the same `LanguageId` are replaced.
+/// Register the bundled DSL-based language plugins (Rust, C, Python, Oxygen)
+/// into `registry`. Existing plugins with the same `LanguageId` are replaced.
 pub fn register_bundled(registry: &mut LanguageRegistry) {
-    for spec_src in [RUST_SPEC, C_SPEC, PYTHON_SPEC] {
+    for spec_src in [RUST_SPEC, C_SPEC, PYTHON_SPEC, OXYGEN_SPEC] {
         match sylven_dsl::parse_spec(spec_src) {
             Ok(spec) => {
                 let compiled = compile(&spec);
@@ -60,11 +61,19 @@ mod tests {
     }
 
     #[test]
-    fn all_three_langs_registered() {
+    fn oxygen_spec_compiles() {
+        let spec = sylven_dsl::parse_spec(OXYGEN_SPEC).expect("oxygen.sylven parse error");
+        let cs = compile(&spec);
+        assert_eq!(cs.lang_id, "oxygen");
+    }
+
+    #[test]
+    fn all_langs_registered() {
         let r = reg();
         assert!(r.contains(LanguageId("rust")));
         assert!(r.contains(LanguageId("c")));
         assert!(r.contains(LanguageId("python")));
+        assert!(r.contains(LanguageId("oxygen")));
     }
 
     #[test]

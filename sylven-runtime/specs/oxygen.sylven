@@ -1,0 +1,77 @@
+language {
+  id "oxygen"
+  extensions [".oxy"]
+  comment.line "//"
+  comment.block "/*" "*/"
+}
+
+tokens {
+  keyword [
+    "fn", "let", "mut", "const", "if", "else", "elif",
+    "for", "while", "loop", "break", "continue", "return",
+    "match", "in", "import", "export", "pub",
+    "struct", "enum", "trait", "impl", "type", "self", "Self"
+  ]
+  bool.lit  ["true", "false", "null", "nil"]
+  prim.type ["int", "float", "bool", "str", "char", "void"]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float.lit     /[0-9]+\.[0-9]+/
+  int.lit       /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  line.comment  "//" to newline
+  block.comment "/*" to "*/"
+  whitespace    /\s+/ trivia
+  "::"   coloncolon
+  "->"   arrow
+  "=>"   fat.arrow
+  "=="   eqeq
+  "!="   ne
+  "<="   le
+  ">="   ge
+  "+="   pluseq
+  "-="   minuseq
+  "*="   stareq
+  "/="   slasheq
+  "&&"   andand
+  "||"   oror
+  ".."   dotdot
+  "("    lparen
+  ")"    rparen
+  "{"    lbrace
+  "}"    rbrace
+  "["    lbracket
+  "]"    rbracket
+  "+"    plus
+  "-"    minus
+  "*"    star
+  "/"    slash
+  "%"    percent
+  "&"    amp
+  "|"    pipe
+  "^"    caret
+  "!"    bang
+  "<"    lt
+  ">"    gt
+  "="    eq
+  "?"    question
+  "."    dot
+  ":"    colon
+  ";"    semicolon
+  ","    comma
+  "@"    at
+}
+
+highlight {
+  token keyword      -> keyword
+  token bool.lit     -> keyword
+  token prim.type    -> type
+  token string       -> string
+  token float.lit    -> number
+  token int.lit      -> number
+  token line.comment  -> comment
+  token block.comment -> comment
+}
+
+fold {
+  Block when multiline
+}
