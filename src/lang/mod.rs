@@ -5,6 +5,7 @@
 //! Once `sylven-langs`/`sylven-dsl` exist, plugins like this move there and
 //! this module becomes a thin re-export.
 
+pub mod json;
 pub mod markdown;
 pub mod mini_oxygen;
 pub mod rust;
