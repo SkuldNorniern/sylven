@@ -6,6 +6,7 @@
 //! hand-written lexer for the Stage 1 proof-of-concept language; future
 //! per-language lexers move to `sylven-langs`, generated from `sylven-dsl`.
 
+mod incremental;
 mod kind;
 mod token;
 
@@ -16,5 +17,6 @@ pub mod rust;
 pub mod toml;
 pub mod yaml;
 
+pub use incremental::IncrementalLexer;
 pub use kind::SyntaxKind;
 pub use token::{Token, TokenStream};
