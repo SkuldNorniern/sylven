@@ -1,0 +1,87 @@
+language {
+  id "c"
+  extensions [".c", ".h"]
+  comment.line "//"
+  comment.block "/*" "*/"
+}
+
+tokens {
+  keyword [
+    "auto", "break", "case", "char", "const", "continue", "default",
+    "do", "double", "else", "enum", "extern", "float", "for", "goto",
+    "if", "inline", "int", "long", "register", "restrict", "return",
+    "short", "signed", "sizeof", "static", "struct", "switch",
+    "typedef", "union", "unsigned", "void", "volatile", "while"
+  ]
+  bool.lit  ["true", "false", "NULL"]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  char.lit      /'([^'\\]|\\.)*'/
+  line.comment  "//" to newline
+  block.comment "/*" to "*/"
+  whitespace    /\s+/ trivia
+  ">>="  shreq
+  "<<="  shleq
+  "..."  ellipsis
+  "=="   eqeq
+  "!="   ne
+  "<="   le
+  ">="   ge
+  "<<"   shl
+  ">>"   shr
+  "++"   inc
+  "--"   dec
+  "+="   pluseq
+  "-="   minuseq
+  "*="   stareq
+  "/="   slasheq
+  "%="   percenteq
+  "&="   ampeq
+  "|="   pipeq
+  "^="   careteq
+  "&&"   andand
+  "||"   oror
+  "->"   arrow
+  "("    lparen
+  ")"    rparen
+  "{"    lbrace
+  "}"    rbrace
+  "["    lbracket
+  "]"    rbracket
+  "+"    plus
+  "-"    minus
+  "*"    star
+  "/"    slash
+  "%"    percent
+  "&"    amp
+  "|"    pipe
+  "^"    caret
+  "!"    bang
+  "~"    tilde
+  "<"    lt
+  ">"    gt
+  "="    eq
+  "?"    question
+  "."    dot
+  ":"    colon
+  ";"    semicolon
+  ","    comma
+  "#"    hash
+}
+
+highlight {
+  token keyword      -> keyword
+  token bool.lit     -> keyword
+  token string       -> string
+  token char.lit     -> string
+  token float        -> number
+  token int          -> number
+  token line.comment  -> comment
+  token block.comment -> comment
+}
+
+fold {
+  Block when multiline
+}

@@ -1,13 +1,5 @@
-use std::sync::Arc;
-
 use sylven_text::TextSnapshot;
 
-use crate::lang::json::JsonLanguage;
-use crate::lang::markdown::MarkdownLanguage;
-use crate::lang::mini_oxygen::MiniOxygen;
-use crate::lang::rust::RustLanguage;
-use crate::lang::toml::TomlLanguage;
-use crate::lang::yaml::YamlLanguage;
 use crate::{LanguageId, LanguageRegistry, ParseResult};
 
 /// Entry point to the syntax engine: a [`LanguageRegistry`] plus the ability
@@ -21,16 +13,15 @@ pub struct SyntaxEngine {
 }
 
 impl SyntaxEngine {
-    /// A new engine with the built-in language plugins registered.
+    /// A new engine with an empty registry.
+    ///
+    /// Register language plugins via [`LanguageRegistry`] — either individually
+    /// or by calling `sylven_runtime::register_bundled(engine.registry_mut())`
+    /// to load the built-in Rust, C, and Python DSL specs.
     pub fn new() -> SyntaxEngine {
-        let mut registry = LanguageRegistry::new();
-        registry.register(Arc::new(MiniOxygen));
-        registry.register(Arc::new(RustLanguage));
-        registry.register(Arc::new(TomlLanguage));
-        registry.register(Arc::new(MarkdownLanguage));
-        registry.register(Arc::new(JsonLanguage));
-        registry.register(Arc::new(YamlLanguage));
-        SyntaxEngine { registry }
+        SyntaxEngine {
+            registry: LanguageRegistry::new(),
+        }
     }
 
     /// Create an engine from a pre-built registry. Useful in tests that need

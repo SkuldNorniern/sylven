@@ -12,10 +12,12 @@
 //! registry.register(Box::new(plugin));
 //! ```
 
+mod bundled;
 mod compile;
 mod pattern;
 mod plugin;
 
+pub use bundled::register_bundled;
 pub use compile::{CompiledSpec, compile};
 pub use pattern::Pattern;
 pub use plugin::RuntimePlugin;

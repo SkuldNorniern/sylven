@@ -1,0 +1,79 @@
+language {
+  id "python"
+  extensions [".py"]
+  comment.line "#"
+}
+
+tokens {
+  keyword [
+    "False", "None", "True", "and", "as", "assert", "async", "await",
+    "break", "class", "continue", "def", "del", "elif", "else",
+    "except", "finally", "for", "from", "global", "if", "import",
+    "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise",
+    "return", "try", "while", "with", "yield"
+  ]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  string.sq     /'([^'\\]|\\.)*'/
+  line.comment  "#" to newline
+  whitespace    /\s+/ trivia
+  "**="  powerassign
+  "//="  floordivassign
+  "**"   power
+  "//"   floordiv
+  "=="   eqeq
+  "!="   ne
+  "<="   le
+  ">="   ge
+  "<<"   shl
+  ">>"   shr
+  "+="   pluseq
+  "-="   minuseq
+  "*="   stareq
+  "/="   slasheq
+  "%="   percenteq
+  "&="   ampeq
+  "|="   pipeq
+  "^="   careteq
+  "->"   arrow
+  "..."  ellipsis
+  "("    lparen
+  ")"    rparen
+  "{"    lbrace
+  "}"    rbrace
+  "["    lbracket
+  "]"    rbracket
+  "+"    plus
+  "-"    minus
+  "*"    star
+  "/"    slash
+  "%"    percent
+  "&"    amp
+  "|"    pipe
+  "^"    caret
+  "~"    tilde
+  "<"    lt
+  ">"    gt
+  "="    eq
+  "!"    bang
+  "."    dot
+  ":"    colon
+  ";"    semicolon
+  ","    comma
+  "@"    at
+}
+
+highlight {
+  token keyword      -> keyword
+  token string       -> string
+  token string.sq    -> string
+  token float        -> number
+  token int          -> number
+  token line.comment -> comment
+}
+
+fold {
+  Block when multiline
+}

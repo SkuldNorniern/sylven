@@ -1,0 +1,91 @@
+language {
+  id "rust"
+  extensions [".rs"]
+  comment.line "//"
+  comment.block "/*" "*/"
+}
+
+tokens {
+  keyword [
+    "as", "async", "await", "break", "const", "continue", "crate",
+    "dyn", "else", "enum", "extern", "false", "fn", "for", "if",
+    "impl", "in", "let", "loop", "match", "mod", "move", "mut",
+    "pub", "ref", "return", "self", "Self", "static", "struct",
+    "super", "trait", "true", "type", "union", "unsafe", "use",
+    "where", "while"
+  ]
+  prim.type [
+    "bool", "char", "f32", "f64", "i8", "i16", "i32", "i64",
+    "i128", "isize", "str", "u8", "u16", "u32", "u64", "u128", "usize"
+  ]
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  line.comment  "//" to newline
+  block.comment "/*" to "*/"
+  whitespace    /\s+/ trivia
+  ">>="  shreq
+  "<<="  shleq
+  "..="  dotdoteq
+  "..."  ellipsis
+  "::"   coloncolon
+  "->"   arrow
+  "=>"   fat.arrow
+  ".."   dotdot
+  "=="   eqeq
+  "!="   ne
+  "<="   le
+  ">="   ge
+  "<<"   shl
+  ">>"   shr
+  "+="   pluseq
+  "-="   minuseq
+  "*="   stareq
+  "/="   slasheq
+  "%="   percenteq
+  "&="   ampeq
+  "|="   pipeq
+  "^="   careteq
+  "&&"   andand
+  "||"   oror
+  "("    lparen
+  ")"    rparen
+  "{"    lbrace
+  "}"    rbrace
+  "["    lbracket
+  "]"    rbracket
+  "+"    plus
+  "-"    minus
+  "*"    star
+  "/"    slash
+  "%"    percent
+  "&"    amp
+  "|"    pipe
+  "^"    caret
+  "!"    bang
+  "<"    lt
+  ">"    gt
+  "="    eq
+  "?"    question
+  "."    dot
+  ":"    colon
+  ";"    semicolon
+  ","    comma
+  "@"    at
+  "#"    hash
+}
+
+highlight {
+  token keyword      -> keyword
+  token prim.type    -> type
+  token string       -> string
+  token float        -> number
+  token int          -> number
+  token line.comment  -> comment
+  token block.comment -> comment
+}
+
+fold {
+  Block when multiline
+}
