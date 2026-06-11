@@ -2,34 +2,94 @@ use sylven_parse::ParseError;
 use sylven_text::TextRange;
 use sylven_tree::SyntaxTree;
 
-/// The output of [`LanguagePlugin::parse`](crate::LanguagePlugin::parse): a
-/// complete, lossless tree, any diagnostics produced while building it, and
-/// derived editor features.
+/// Editor-visible highlight category. Language-agnostic — maps to theme slots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HighlightKind {
+    Keyword,
+    KeywordControl,
+    Type,
+    String,
+    Comment,
+    Number,
+    Operator,
+    Punctuation,
+    Function,
+    Variable,
+    Attribute,
+    Macro,
+    Lifetime,
+}
+
+/// A single highlighted region with its semantic kind.
+#[derive(Debug, Clone)]
+pub struct Highlight {
+    pub range: TextRange,
+    pub kind: HighlightKind,
+}
+
+/// Document symbol kind for outline and picker display.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymbolKind {
+    Function,
+    Struct,
+    Enum,
+    Trait,
+    Impl,
+    Module,
+    Constant,
+    TypeAlias,
+    Macro,
+}
+
+impl SymbolKind {
+    /// Short human label shown in the symbol picker's detail column.
+    pub fn label(self) -> &'static str {
+        match self {
+            SymbolKind::Function => "fn",
+            SymbolKind::Struct => "struct",
+            SymbolKind::Enum => "enum",
+            SymbolKind::Trait => "trait",
+            SymbolKind::Impl => "impl",
+            SymbolKind::Module => "mod",
+            SymbolKind::Constant => "const",
+            SymbolKind::TypeAlias => "type",
+            SymbolKind::Macro => "macro",
+        }
+    }
+}
+
+/// One document symbol: name, kind, and byte ranges for the declaration and
+/// name token. The line number must be derived by the caller using a
+/// [`LineIndex`](sylven_text::LineIndex).
+#[derive(Debug, Clone)]
+pub struct SymbolInfo {
+    pub name: String,
+    /// Byte range of the name token only (for cursor placement).
+    pub name_range: TextRange,
+    /// Byte range of the whole declaration keyword (for folding anchors).
+    pub decl_range: TextRange,
+    pub kind: SymbolKind,
+}
+
+/// Editor-facing data derived from a parse, beyond the tree itself.
+#[derive(Debug, Clone, Default)]
+pub struct SyntaxFeatures {
+    /// Per-token highlight ranges with semantic kinds.
+    pub highlights: Vec<Highlight>,
+    /// Foldable block ranges (e.g. `{…}` spans that cross line boundaries).
+    pub folds: Vec<TextRange>,
+    /// Document symbols (functions, types, modules, …).
+    pub symbols: Vec<SymbolInfo>,
+    /// Embedded-language injection ranges.
+    pub injections: Vec<TextRange>,
+    /// Matching bracket/delimiter pairs.
+    pub brackets: Vec<(TextRange, TextRange)>,
+}
+
+/// The output of [`LanguagePlugin::parse`](crate::LanguagePlugin::parse).
 #[derive(Debug, Clone)]
 pub struct ParseResult {
     pub tree: SyntaxTree,
     pub errors: Vec<ParseError>,
     pub features: SyntaxFeatures,
-}
-
-/// Editor-facing data derived from a parse, beyond the tree itself.
-///
-/// At Stage 1 every field is always empty: highlighting, folding, symbols,
-/// injections, and bracket pairs are all driven by the typed-rules layer
-/// (plan.md Stage 3+), which doesn't exist yet. The fields are placeholder
-/// [`TextRange`]-shaped data so [`crate::SyntaxSession`] and its callers have
-/// a stable shape to program against while that layer is built out.
-#[derive(Debug, Clone, Default)]
-pub struct SyntaxFeatures {
-    /// Ranges to apply syntax highlighting to.
-    pub highlights: Vec<TextRange>,
-    /// Foldable regions (e.g. function bodies, blocks).
-    pub folds: Vec<TextRange>,
-    /// Document symbol ranges (e.g. function and variable declarations).
-    pub symbols: Vec<TextRange>,
-    /// Embedded-language regions (e.g. a string that holds another
-    /// language's source).
-    pub injections: Vec<TextRange>,
-    /// Matching bracket/delimiter pairs.
-    pub brackets: Vec<(TextRange, TextRange)>,
 }
