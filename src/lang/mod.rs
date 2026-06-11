@@ -6,3 +6,4 @@
 //! this module becomes a thin re-export.
 
 pub mod mini_oxygen;
+pub mod rust;

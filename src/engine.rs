@@ -3,6 +3,7 @@ use std::sync::Arc;
 use sylven_text::TextSnapshot;
 
 use crate::lang::mini_oxygen::MiniOxygen;
+use crate::lang::rust::RustLanguage;
 use crate::{LanguageId, LanguageRegistry, ParseResult};
 
 /// Entry point to the syntax engine: a [`LanguageRegistry`] plus the ability
@@ -20,6 +21,7 @@ impl SyntaxEngine {
     pub fn new() -> SyntaxEngine {
         let mut registry = LanguageRegistry::new();
         registry.register(Arc::new(MiniOxygen));
+        registry.register(Arc::new(RustLanguage));
         SyntaxEngine { registry }
     }
 

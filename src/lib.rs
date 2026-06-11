@@ -29,5 +29,8 @@ pub mod prelude;
 pub use engine::SyntaxEngine;
 pub use language::{LanguageId, LanguagePlugin};
 pub use registry::LanguageRegistry;
-pub use result::{ParseResult, SyntaxFeatures};
+pub use result::{
+    Highlight, HighlightKind, ParseResult, SymbolInfo, SymbolKind, SyntaxFeatures,
+};
 pub use session::SyntaxSession;
+pub use sylven_text::{DocumentId, RevisionId, TextSnapshot};
