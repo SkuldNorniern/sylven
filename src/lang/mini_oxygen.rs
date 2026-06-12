@@ -243,10 +243,7 @@ fn parse_expr_bp(p: &mut Parser, min_bp: u8) {
     let checkpoint = p.checkpoint();
     parse_unary(p);
 
-    loop {
-        let Some((lbp, rbp)) = binary_binding_power(p.current()) else {
-            break;
-        };
+    while let Some((lbp, rbp)) = binary_binding_power(p.current()) {
         if lbp < min_bp {
             break;
         }

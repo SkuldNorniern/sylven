@@ -425,15 +425,14 @@ fn consume_time_and_offset(bytes: &[u8], pos: &mut usize) {
     }
     match bytes.get(*pos) {
         Some(&b'Z') | Some(&b'z') => *pos += 1,
-        Some(&b'+') | Some(&b'-') => {
+        Some(&b'+') | Some(&b'-')
             if is_digit_at(bytes, *pos + 1)
                 && is_digit_at(bytes, *pos + 2)
                 && bytes.get(*pos + 3) == Some(&b':')
                 && is_digit_at(bytes, *pos + 4)
-                && is_digit_at(bytes, *pos + 5)
-            {
-                *pos += 6;
-            }
+                && is_digit_at(bytes, *pos + 5) =>
+        {
+            *pos += 6;
         }
         _ => {}
     }
