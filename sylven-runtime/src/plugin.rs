@@ -91,11 +91,17 @@ fn runtime_lex(source: &str, spec: &CompiledSpec) -> Vec<Token> {
         }
 
         if !matched {
-            // Unknown character — emit an ERROR token and advance one byte.
+            // Preserve one complete UTF-8 code point as an ERROR token so the
+            // next source slice remains on a character boundary.
+            let len = remaining
+                .chars()
+                .next()
+                .expect("remaining source is non-empty")
+                .len_utf8();
             let start = TextSize::from(pos as u32);
-            let end = TextSize::from((pos + 1) as u32);
+            let end = TextSize::from((pos + len) as u32);
             tokens.push(Token::new(SyntaxKind::ERROR, TextRange::new(start, end)));
-            pos += 1;
+            pos += len;
         }
     }
 
@@ -268,6 +274,27 @@ fold { Block when multiline }
         let src = "let x @ 1;";
         let result = make_plugin().parse(&snap(src));
         assert_eq!(result.tree.text(), src);
+    }
+
+    #[test]
+    fn unknown_unicode_char_is_lossless() {
+        let src = "let cafe = \u{2615};";
+        let result = make_plugin().parse(&snap(src));
+        assert_eq!(result.tree.text(), src);
+    }
+
+    #[test]
+    fn unknown_unicode_between_recognized_tokens_does_not_panic() {
+        let src = "fn \u{03bb}() {}";
+        let result = make_plugin().parse(&snap(src));
+        assert_eq!(result.tree.text(), src);
+        assert!(
+            result
+                .features
+                .highlights
+                .iter()
+                .any(|highlight| highlight.kind == sylven::HighlightKind::Keyword)
+        );
     }
 
     #[test]

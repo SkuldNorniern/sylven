@@ -13,10 +13,10 @@ use crate::{LanguageId, ParseResult, SyntaxEngine, SyntaxFeatures};
 ///
 /// - [`parse`](Self::parse) — always does a full re-parse from scratch.
 /// - [`parse_edit`](Self::parse_edit) — coarse incremental path (Stage 7):
-///   locates the smallest top-level child containing the edit, does a full
-///   re-parse of the new source, then splices unchanged top-level children from
-///   the old green tree so their `Arc<GreenNode>` allocations are reused. Falls
-///   back to using the new tree as-is when the edit spans multiple children.
+///   performs a full parse of the new source, then reuses structurally
+///   unchanged top-level green children from the old result. This reduces tree
+///   allocation but does not reduce lexer or parser CPU time. It falls back to
+///   the new tree as-is when the edit spans multiple children.
 pub struct SyntaxSession {
     engine: Arc<SyntaxEngine>,
     language: LanguageId,
@@ -49,9 +49,9 @@ impl SyntaxSession {
         self.result.as_ref()
     }
 
-    /// Coarse incremental update (Stage 7): apply `edit` to the current
-    /// source to produce `new_snapshot`, then do a full parse of the new
-    /// source and splice unchanged top-level children from the old green tree.
+    /// Apply `edit` to the current source, fully parse `new_snapshot`, then
+    /// splice structurally unchanged top-level children from the old green
+    /// tree. This is allocation reuse, not regional lexing or parsing.
     ///
     /// Falls back to a full parse without splicing if:
     /// - No previous result exists (first parse).
@@ -204,8 +204,11 @@ mod tests {
         let incremental = s1.parse_edit(&edit, snap(&new_src)).unwrap();
         let full = s2.parse(snap(&new_src)).unwrap();
 
-        // Both trees must reproduce the new source text losslessly.
+        // The complete incremental result must match a full parse.
         assert_eq!(incremental.tree.text(), full.tree.text());
+        assert_eq!(incremental.tree.green(), full.tree.green());
+        assert_eq!(incremental.errors, full.errors);
+        assert_eq!(incremental.features, full.features);
     }
 
     #[test]

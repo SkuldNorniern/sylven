@@ -37,6 +37,8 @@ pub(crate) fn find_dirty_child(node: &GreenNode, edit_range: TextRange) -> Optio
 /// Splice `old_green` and `new_green` together: reuse unchanged children from
 /// `old_green` and take the dirty child (at index `dirty_idx`) from
 /// `new_green`.
+/// A non-dirty child is reused only when it is structurally equal to the newly
+/// parsed child, since lexer state can make an edit affect later children.
 ///
 /// Green nodes are **position-independent** — they store only text length, not
 /// absolute offsets — so it is always safe to `Arc::clone` an old child into a
@@ -59,7 +61,7 @@ pub fn splice_green(
 
     let mut children: Vec<GreenElement> = Vec::with_capacity(old_children.len());
     for (i, (old, new)) in old_children.iter().zip(new_children.iter()).enumerate() {
-        if i == dirty_idx {
+        if i == dirty_idx || old != new {
             children.push(new.clone()); // reparsed child
         } else {
             children.push(old.clone()); // unchanged — reuse Arc (no re-allocation)
@@ -157,6 +159,27 @@ mod tests {
                     "unchanged child {i} should reuse old Arc"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn splice_keeps_changed_non_dirty_children_from_new_tree() {
+        let (_, old_green) = build_file(&["aaa", "bbb", "ccc"]);
+        let (_, new_green) = build_file(&["aaa", "BBB", "CCC"]);
+        let edit_range = TextRange::new(TextSize::from(5), TextSize::from(7));
+        let dirty_idx = find_dirty_child(&old_green, edit_range).unwrap();
+
+        let spliced = splice_green(&old_green, &new_green, dirty_idx);
+
+        assert_eq!(spliced.as_ref(), new_green.as_ref());
+        if let (GreenElement::Node(old_last), GreenElement::Node(spliced_last)) = (
+            old_green.children().last().unwrap(),
+            spliced.children().last().unwrap(),
+        ) {
+            assert!(
+                !Arc::ptr_eq(old_last, spliced_last),
+                "a changed child outside the dirty index must come from the new tree"
+            );
         }
     }
 }

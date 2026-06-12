@@ -23,7 +23,7 @@ pub enum HighlightKind {
 }
 
 /// A single highlighted region with its semantic kind.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Highlight {
     pub range: TextRange,
     pub kind: HighlightKind,
@@ -69,7 +69,7 @@ impl SymbolKind {
 /// One document symbol: name, kind, and byte ranges for the declaration and
 /// name token. The line number must be derived by the caller using a
 /// [`LineIndex`](sylven_text::LineIndex).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolInfo {
     pub name: String,
     /// Byte range of the name token only (for cursor placement).
@@ -80,7 +80,7 @@ pub struct SymbolInfo {
 }
 
 /// Editor-facing data derived from a parse, beyond the tree itself.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SyntaxFeatures {
     /// Per-token highlight ranges with semantic kinds.
     pub highlights: Vec<Highlight>,
