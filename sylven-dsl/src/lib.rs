@@ -26,8 +26,8 @@ mod lexer;
 mod parser;
 
 pub use ast::{
-    Assoc, FoldCondition, FoldRule, HighlightRule, HighlightSource, LanguageMeta, NodeDecl,
-    NodeField, PrattInfix, PrattPrefix, PrattSpec, RecoveryRule, RecoveryStrategy, SylvenSpec,
+    Assoc, FoldCondition, FoldRule, GrammarItem, HighlightRule, HighlightSource, LanguageMeta,
+    NodeDecl, PrattInfix, PrattPrefix, PrattSpec, RecoveryRule, RecoveryStrategy, SylvenSpec,
     SymbolRule, TokenDecl, TokenKind,
 };
 pub use parser::{DslError, parse_spec};

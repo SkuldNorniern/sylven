@@ -52,15 +52,25 @@ pub enum TokenKind {
 #[derive(Debug, Clone, Default)]
 pub struct NodeDecl {
     pub name: String,
-    /// Named child fields: `name:Name params:ParamList`.
-    pub fields: Vec<NodeField>,
+    /// Grammar items that make up this node's body.
+    pub items: Vec<GrammarItem>,
 }
 
-/// A named child reference inside a node declaration.
+/// One item in the body of a grammar node declaration.
 #[derive(Debug, Clone)]
-pub struct NodeField {
-    pub label: String,
-    pub ty: String,
+pub enum GrammarItem {
+    /// Anonymous inline literal consumed from input: `"fn"`, `"("`, `";"`.
+    Literal(String),
+    /// Named child field: `name:Ident`, `body:Block`.
+    Field { label: String, ty: String },
+    /// Anonymous type reference (no label): bare `Block`, `Ident`.
+    Ref(String),
+    /// Alternatives: `FnDecl | LetStmt | ExprStmt`.
+    Choice(Vec<String>),
+    /// Optional item: `X?`.
+    Optional(Box<GrammarItem>),
+    /// Zero-or-more: `X*`.
+    Repeat(Box<GrammarItem>),
 }
 
 /// A Pratt expression table declared as `pratt Name { ... }`.

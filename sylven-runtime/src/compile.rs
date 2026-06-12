@@ -1,9 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use sylven::HighlightKind;
 use sylven_lex::SyntaxKind;
 
-use sylven_dsl::{FoldCondition, HighlightSource, SylvenSpec, TokenDecl, TokenKind};
+use sylven_dsl::{
+    FoldCondition, GrammarItem, HighlightSource, NodeDecl, SylvenSpec, TokenDecl, TokenKind,
+};
 
 use crate::pattern::Pattern;
 
@@ -23,6 +25,58 @@ pub struct CompiledSpec {
     pub bracket_pairs: Vec<(SyntaxKind, SyntaxKind)>,
     /// Whether folds should be emitted for bracket pairs that span multiple lines.
     pub fold_brackets: bool,
+    /// Compiled grammar nodes; non-empty only when the spec has a `grammar {}` block.
+    /// The first entry is always the root/file node.
+    pub nodes: Vec<CompiledNode>,
+}
+
+// ── Compiled grammar types ─────────────────────────────────────────────────────
+
+/// One compiled grammar node declaration.
+#[derive(Debug, Clone)]
+pub struct CompiledNode {
+    /// Syntax kind assigned to this node.
+    pub kind: SyntaxKind,
+    /// Name as written in the spec (for diagnostics).
+    pub name: String,
+    /// Compiled grammar rule for this node.
+    pub rule: CompiledRule,
+    /// First-token set: the token kinds (plus optional keyword text) that can
+    /// start this node. Used by the runtime executor for lookahead dispatch.
+    pub first_tokens: Vec<FirstToken>,
+}
+
+/// Compiled grammar rule for a single node.
+#[derive(Debug, Clone)]
+pub enum CompiledRule {
+    /// Consume items in order.
+    Sequence(Vec<CompiledItem>),
+}
+
+/// One item in a compiled grammar sequence.
+#[derive(Debug, Clone)]
+pub enum CompiledItem {
+    /// Consume a token of a specific kind (non-keyword).
+    Token(SyntaxKind),
+    /// Consume a keyword token whose source text equals `text`.
+    Keyword { kind: SyntaxKind, text: String },
+    /// Parse a child node (index into `CompiledSpec::nodes`).
+    Node(usize),
+    /// Dispatch to one of the listed nodes based on first-token lookahead.
+    Choice(Vec<usize>),
+    /// Execute inner item only when it can start.
+    Optional(Box<CompiledItem>),
+    /// Execute inner item zero-or-more times while it can start.
+    Repeat(Box<CompiledItem>),
+}
+
+/// A token that can start a grammar node.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FirstToken {
+    /// Any token of this kind.
+    Kind(SyntaxKind),
+    /// A keyword token with this specific source text.
+    Keyword { kind: SyntaxKind, text: String },
 }
 
 /// Compile a parsed `SylvenSpec` into a `CompiledSpec`. Assigns `SyntaxKind`
@@ -104,6 +158,42 @@ pub fn compile(spec: &SylvenSpec) -> CompiledSpec {
         .iter()
         .any(|f| f.condition == FoldCondition::Multiline);
 
+    // ── Grammar node compilation ─────────────────────────────────────────────
+
+    // Build reverse maps needed to resolve grammar item references.
+    // lit_to_kind: literal text (e.g. "(") → SyntaxKind
+    let mut lit_to_kind: HashMap<&str, SyntaxKind> = HashMap::new();
+    // kw_text_to_kind: keyword text (e.g. "fn") → shared keyword SyntaxKind
+    let mut kw_text_to_kind: HashMap<&str, SyntaxKind> = HashMap::new();
+    for (pat, kind, _) in &matchers {
+        match pat {
+            Pattern::Literal(s) => {
+                lit_to_kind.insert(s.as_str(), *kind);
+            }
+            Pattern::Keywords(kws) => {
+                for kw in kws {
+                    kw_text_to_kind.insert(kw.as_str(), *kind);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let nodes = if spec.grammar.is_empty() {
+        Vec::new()
+    } else {
+        compile_grammar(
+            &spec.grammar,
+            &name_to_kind,
+            &lit_to_kind,
+            &kw_text_to_kind,
+            &mut next_id,
+        )
+    };
+
+    // If grammar nodes exist, the first node is the root → override file_kind.
+    let file_kind = nodes.first().map(|n| n.kind).unwrap_or(file_kind);
+
     CompiledSpec {
         lang_id: spec.language.id.clone(),
         matchers,
@@ -111,6 +201,191 @@ pub fn compile(spec: &SylvenSpec) -> CompiledSpec {
         highlights,
         bracket_pairs,
         fold_brackets,
+        nodes,
+    }
+}
+
+// ── Grammar compilation helpers ────────────────────────────────────────────────
+
+fn compile_grammar(
+    decls: &[NodeDecl],
+    name_to_kind: &HashMap<&str, SyntaxKind>,
+    lit_to_kind: &HashMap<&str, SyntaxKind>,
+    kw_text_to_kind: &HashMap<&str, SyntaxKind>,
+    next_id: &mut u16,
+) -> Vec<CompiledNode> {
+    // Pass 1: assign SyntaxKinds and build name→index map.
+    let mut node_name_to_idx: HashMap<&str, usize> = HashMap::new();
+    let mut node_kinds: Vec<SyntaxKind> = Vec::new();
+    for (i, decl) in decls.iter().enumerate() {
+        let kind = SyntaxKind(*next_id);
+        *next_id += 1;
+        node_name_to_idx.insert(decl.name.as_str(), i);
+        node_kinds.push(kind);
+    }
+
+    // Pass 2: compile items for each node.
+    let mut nodes: Vec<CompiledNode> = decls
+        .iter()
+        .enumerate()
+        .map(|(i, decl)| {
+            let rule = compile_node_items(
+                &decl.items,
+                name_to_kind,
+                lit_to_kind,
+                kw_text_to_kind,
+                &node_name_to_idx,
+            );
+            CompiledNode {
+                kind: node_kinds[i],
+                name: decl.name.clone(),
+                rule,
+                first_tokens: Vec::new(), // filled in pass 3
+            }
+        })
+        .collect();
+
+    // Pass 3: compute first-token sets (needs all nodes to already exist).
+    let first_tokens: Vec<Vec<FirstToken>> = (0..nodes.len())
+        .map(|i| compute_first_tokens(&nodes, i, &mut HashSet::new()))
+        .collect();
+    for (node, ft) in nodes.iter_mut().zip(first_tokens) {
+        node.first_tokens = ft;
+    }
+
+    nodes
+}
+
+fn compile_node_items(
+    items: &[GrammarItem],
+    name_to_kind: &HashMap<&str, SyntaxKind>,
+    lit_to_kind: &HashMap<&str, SyntaxKind>,
+    kw_text_to_kind: &HashMap<&str, SyntaxKind>,
+    node_name_to_idx: &HashMap<&str, usize>,
+) -> CompiledRule {
+    let compiled = items
+        .iter()
+        .map(|item| {
+            compile_grammar_item(
+                item,
+                name_to_kind,
+                lit_to_kind,
+                kw_text_to_kind,
+                node_name_to_idx,
+            )
+        })
+        .collect();
+    CompiledRule::Sequence(compiled)
+}
+
+fn compile_grammar_item(
+    item: &GrammarItem,
+    name_to_kind: &HashMap<&str, SyntaxKind>,
+    lit_to_kind: &HashMap<&str, SyntaxKind>,
+    kw_text_to_kind: &HashMap<&str, SyntaxKind>,
+    node_name_to_idx: &HashMap<&str, usize>,
+) -> CompiledItem {
+    match item {
+        GrammarItem::Literal(text) => {
+            if let Some(&kind) = lit_to_kind.get(text.as_str()) {
+                CompiledItem::Token(kind)
+            } else if let Some(&kind) = kw_text_to_kind.get(text.as_str()) {
+                CompiledItem::Keyword {
+                    kind,
+                    text: text.clone(),
+                }
+            } else {
+                CompiledItem::Token(SyntaxKind::ERROR)
+            }
+        }
+        GrammarItem::Field { ty, .. } | GrammarItem::Ref(ty) => {
+            resolve_type_ref(ty, name_to_kind, node_name_to_idx)
+        }
+        GrammarItem::Choice(names) => {
+            let alts = names
+                .iter()
+                .filter_map(|n| node_name_to_idx.get(n.as_str()).copied())
+                .collect();
+            CompiledItem::Choice(alts)
+        }
+        GrammarItem::Optional(inner) => CompiledItem::Optional(Box::new(compile_grammar_item(
+            inner,
+            name_to_kind,
+            lit_to_kind,
+            kw_text_to_kind,
+            node_name_to_idx,
+        ))),
+        GrammarItem::Repeat(inner) => CompiledItem::Repeat(Box::new(compile_grammar_item(
+            inner,
+            name_to_kind,
+            lit_to_kind,
+            kw_text_to_kind,
+            node_name_to_idx,
+        ))),
+    }
+}
+
+fn resolve_type_ref(
+    ty: &str,
+    name_to_kind: &HashMap<&str, SyntaxKind>,
+    node_name_to_idx: &HashMap<&str, usize>,
+) -> CompiledItem {
+    if let Some(&idx) = node_name_to_idx.get(ty) {
+        CompiledItem::Node(idx)
+    } else if let Some(&kind) = name_to_kind.get(ty) {
+        CompiledItem::Token(kind)
+    } else {
+        CompiledItem::Token(SyntaxKind::ERROR)
+    }
+}
+
+fn compute_first_tokens(
+    nodes: &[CompiledNode],
+    idx: usize,
+    visiting: &mut HashSet<usize>,
+) -> Vec<FirstToken> {
+    if !visiting.insert(idx) {
+        return Vec::new(); // cycle guard
+    }
+    let result = first_of_rule(&nodes[idx].rule, nodes, visiting);
+    visiting.remove(&idx);
+    result
+}
+
+fn first_of_rule(
+    rule: &CompiledRule,
+    nodes: &[CompiledNode],
+    visiting: &mut HashSet<usize>,
+) -> Vec<FirstToken> {
+    match rule {
+        CompiledRule::Sequence(items) => items
+            .first()
+            .map(|item| first_of_item(item, nodes, visiting))
+            .unwrap_or_default(),
+    }
+}
+
+fn first_of_item(
+    item: &CompiledItem,
+    nodes: &[CompiledNode],
+    visiting: &mut HashSet<usize>,
+) -> Vec<FirstToken> {
+    match item {
+        CompiledItem::Token(k) => vec![FirstToken::Kind(*k)],
+        CompiledItem::Keyword { kind, text } => {
+            vec![FirstToken::Keyword {
+                kind: *kind,
+                text: text.clone(),
+            }]
+        }
+        CompiledItem::Node(idx) => compute_first_tokens(nodes, *idx, visiting),
+        CompiledItem::Choice(alts) => alts
+            .iter()
+            .flat_map(|&alt| compute_first_tokens(nodes, alt, visiting))
+            .collect(),
+        CompiledItem::Optional(inner) | CompiledItem::Repeat(inner) => {
+            first_of_item(inner, nodes, visiting)
+        }
     }
 }
 
@@ -255,5 +530,70 @@ fold { Block when multiline }
         let cs = compile(&spec);
         let ws = cs.matchers.iter().find(|(_, _, trivia)| *trivia).unwrap();
         assert!(ws.1.is_trivia());
+    }
+
+    const GRAMMAR_SPEC: &str = r#"
+language { id "g" extensions [".g"] }
+tokens {
+  keyword ["fn", "let"]
+  ident /[a-zA-Z_]\w*/
+  "(" lparen
+  ")" rparen
+  "{" lbrace
+  "}" rbrace
+  "=" eq
+  ";" semicolon
+  whitespace /\s+/ trivia
+}
+grammar {
+  node File { TopDecl* }
+  node TopDecl { FnDecl | LetStmt }
+  node FnDecl { "fn" ident "(" ")" Block }
+  node LetStmt { "let" ident "=" ident ";" }
+  node Block { "{" LetStmt* "}" }
+}
+"#;
+
+    #[test]
+    fn grammar_nodes_compiled() {
+        let spec = parse_spec(GRAMMAR_SPEC).unwrap();
+        let cs = compile(&spec);
+        assert_eq!(cs.nodes.len(), 5);
+        assert_eq!(cs.nodes[0].name, "File");
+    }
+
+    #[test]
+    fn grammar_file_kind_overridden_by_first_node() {
+        let spec = parse_spec(GRAMMAR_SPEC).unwrap();
+        let cs = compile(&spec);
+        assert_eq!(cs.file_kind, cs.nodes[0].kind);
+    }
+
+    #[test]
+    fn grammar_fn_decl_first_tokens() {
+        let spec = parse_spec(GRAMMAR_SPEC).unwrap();
+        let cs = compile(&spec);
+        let fn_decl = cs.nodes.iter().find(|n| n.name == "FnDecl").unwrap();
+        assert!(fn_decl.first_tokens.iter().any(|ft| matches!(
+            ft, FirstToken::Keyword { text, .. } if text == "fn"
+        )));
+    }
+
+    #[test]
+    fn grammar_choice_first_tokens_are_union() {
+        let spec = parse_spec(GRAMMAR_SPEC).unwrap();
+        let cs = compile(&spec);
+        let top_decl = cs.nodes.iter().find(|n| n.name == "TopDecl").unwrap();
+        let has_fn = top_decl.first_tokens.iter().any(|ft| {
+            matches!(
+                ft, FirstToken::Keyword { text, .. } if text == "fn"
+            )
+        });
+        let has_let = top_decl.first_tokens.iter().any(|ft| {
+            matches!(
+                ft, FirstToken::Keyword { text, .. } if text == "let"
+            )
+        });
+        assert!(has_fn && has_let);
     }
 }

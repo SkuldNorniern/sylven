@@ -1,6 +1,6 @@
 use crate::ast::{
-    Assoc, FoldCondition, FoldRule, HighlightRule, HighlightSource, LanguageMeta, NodeDecl,
-    NodeField, PrattInfix, PrattPrefix, PrattSpec, RecoveryRule, RecoveryStrategy, SylvenSpec,
+    Assoc, FoldCondition, FoldRule, GrammarItem, HighlightRule, HighlightSource, LanguageMeta,
+    NodeDecl, PrattInfix, PrattPrefix, PrattSpec, RecoveryRule, RecoveryStrategy, SylvenSpec,
     SymbolRule, TokenDecl, TokenKind,
 };
 use crate::lexer::{TK, Token, lex};
@@ -335,24 +335,83 @@ impl Parser {
 
     fn parse_node_decl(&mut self) -> Option<NodeDecl> {
         let name = self.expect_word()?;
-        let mut fields = Vec::new();
-        if self.at(TK::LBrace) {
+        let items = if self.at(TK::LBrace) {
             self.advance();
-            while !self.at(TK::RBrace) && !self.at_eof() {
-                let Some(label) = self.expect_word() else {
-                    break;
-                };
-                if !self.expect(TK::Colon) {
-                    break;
-                }
-                let Some(ty) = self.expect_word() else {
-                    break;
-                };
-                fields.push(NodeField { label, ty });
-            }
+            let items = self.parse_grammar_items();
             self.expect(TK::RBrace);
+            items
+        } else {
+            Vec::new()
+        };
+        Some(NodeDecl { name, items })
+    }
+
+    /// Parse the body of a `node Name { ... }` declaration.
+    /// Supports:
+    ///   `"literal"`          → GrammarItem::Literal
+    ///   `label:Type`         → GrammarItem::Field
+    ///   `Type`               → GrammarItem::Ref
+    ///   `A | B | C`          → GrammarItem::Choice  (bare refs only)
+    ///   `X?`                 → GrammarItem::Optional
+    ///   `X*`                 → GrammarItem::Repeat
+    fn parse_grammar_items(&mut self) -> Vec<GrammarItem> {
+        let mut items = Vec::new();
+        while !self.at(TK::RBrace) && !self.at_eof() {
+            // Base item: literal, label:Type, or bare Type
+            let item = match self.cur() {
+                TK::Str => GrammarItem::Literal(self.take()),
+                TK::Word => {
+                    let word = self.take();
+                    if self.at(TK::Colon) {
+                        self.advance(); // consume `:`
+                        let ty = self.expect_word().unwrap_or_default();
+                        GrammarItem::Field { label: word, ty }
+                    } else {
+                        GrammarItem::Ref(word)
+                    }
+                }
+                _ => {
+                    self.error(format!("unexpected {:?} in grammar body", self.cur()));
+                    self.advance();
+                    continue;
+                }
+            };
+
+            // `|` immediately after a Ref turns it into a Choice
+            if self.at(TK::Pipe) {
+                let first = match item {
+                    GrammarItem::Ref(name) => name,
+                    _ => {
+                        self.error("only bare type names can be joined with `|`");
+                        items.push(item);
+                        continue;
+                    }
+                };
+                let mut names = vec![first];
+                while self.at(TK::Pipe) {
+                    self.advance(); // consume `|`
+                    if let Some(n) = self.expect_word() {
+                        names.push(n);
+                    }
+                }
+                items.push(GrammarItem::Choice(names));
+                continue;
+            }
+
+            // `?` or `*` cardinality suffix
+            let item = if self.at(TK::Question) {
+                self.advance();
+                GrammarItem::Optional(Box::new(item))
+            } else if self.at(TK::Star) {
+                self.advance();
+                GrammarItem::Repeat(Box::new(item))
+            } else {
+                item
+            };
+
+            items.push(item);
         }
-        Some(NodeDecl { name, fields })
+        items
     }
 
     // --- pratt Name {} ---
@@ -570,7 +629,9 @@ pub fn parse_spec(source: &str) -> Result<SylvenSpec, Vec<DslError>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{Assoc, FoldCondition, HighlightSource, RecoveryStrategy, TokenKind};
+    use crate::ast::{
+        Assoc, FoldCondition, GrammarItem, HighlightSource, RecoveryStrategy, TokenKind,
+    };
 
     /// Minimal spec used across several tests.
     const MINI_OXYGEN: &str = r#"
@@ -736,9 +797,52 @@ symbols {
         let spec = ok(MINI_OXYGEN);
         assert!(spec.grammar.iter().any(|n| n.name == "File"));
         let fn_decl = spec.grammar.iter().find(|n| n.name == "FnDecl").unwrap();
-        assert_eq!(fn_decl.fields.len(), 3);
-        assert_eq!(fn_decl.fields[0].label, "name");
-        assert_eq!(fn_decl.fields[0].ty, "Name");
+        assert_eq!(fn_decl.items.len(), 3);
+        let GrammarItem::Field { label, ty } = &fn_decl.items[0] else {
+            panic!("expected Field, got {:?}", fn_decl.items[0]);
+        };
+        assert_eq!(label, "name");
+        assert_eq!(ty, "Name");
+    }
+
+    #[test]
+    fn grammar_choice_parsed() {
+        let src = r#"
+language { id "t" extensions [".t"] }
+tokens { keyword ["fn", "let"] ident /[a-z]+/ }
+grammar {
+  node Stmt { FnDecl | LetStmt }
+  node FnDecl { "fn" name:ident }
+  node LetStmt { "let" name:ident }
+}
+"#;
+        let spec = ok(src);
+        let stmt = spec.grammar.iter().find(|n| n.name == "Stmt").unwrap();
+        assert_eq!(stmt.items.len(), 1);
+        let GrammarItem::Choice(names) = &stmt.items[0] else {
+            panic!("expected Choice, got {:?}", stmt.items[0]);
+        };
+        assert_eq!(names, &["FnDecl", "LetStmt"]);
+    }
+
+    #[test]
+    fn grammar_repeat_and_optional() {
+        let src = r#"
+language { id "t" extensions [".t"] }
+tokens { keyword ["fn"] ident /[a-z]+/ }
+grammar {
+  node File { TopDecl* }
+  node TopDecl { FnDecl? }
+  node FnDecl { "fn" ident }
+}
+"#;
+        let spec = ok(src);
+        let file = spec.grammar.iter().find(|n| n.name == "File").unwrap();
+        assert_eq!(file.items.len(), 1);
+        assert!(matches!(&file.items[0], GrammarItem::Repeat(_)));
+
+        let top = spec.grammar.iter().find(|n| n.name == "TopDecl").unwrap();
+        assert!(matches!(&top.items[0], GrammarItem::Optional(_)));
     }
 
     #[test]

@@ -17,6 +17,12 @@ pub(crate) enum TK {
     Arrow,
     Colon,
     Comma,
+    /// `|` used for alternative choices in grammar rules.
+    Pipe,
+    /// `?` used for optional items in grammar rules.
+    Question,
+    /// `*` used for repeated items in grammar rules.
+    Star,
     Invalid,
     Eof,
 }
@@ -74,6 +80,18 @@ pub(crate) fn lex(source: &str) -> Vec<Token> {
             }
             b',' => {
                 out.push(tok(TK::Comma, ",", start));
+                i += 1;
+            }
+            b'|' => {
+                out.push(tok(TK::Pipe, "|", start));
+                i += 1;
+            }
+            b'?' => {
+                out.push(tok(TK::Question, "?", start));
+                i += 1;
+            }
+            b'*' => {
+                out.push(tok(TK::Star, "*", start));
                 i += 1;
             }
             // `->` arrow; bare `-` becomes Invalid.
@@ -239,6 +257,12 @@ mod tests {
         let toks = lex("comment.line int.number");
         assert_eq!(toks[0].text, "comment.line");
         assert_eq!(toks[1].text, "int.number");
+    }
+
+    #[test]
+    fn grammar_punctuation() {
+        let ks = kinds("| ? *");
+        assert_eq!(ks, vec![TK::Pipe, TK::Question, TK::Star, TK::Eof]);
     }
 
     #[test]
