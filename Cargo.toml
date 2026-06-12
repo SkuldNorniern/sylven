@@ -15,3 +15,4 @@ sylven-text = { path = "sylven-text" }
 sylven-lex = { path = "sylven-lex" }
 sylven-tree = { path = "sylven-tree" }
 sylven-parse = { path = "sylven-parse" }
+sylven-dsl = { path = "sylven-dsl" }
