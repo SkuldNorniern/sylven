@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
-use sylven::HighlightKind;
+use sylven::{HighlightKind, SymbolKind};
 use sylven_lex::SyntaxKind;
 
 use sylven_dsl::{
-    FoldCondition, GrammarItem, HighlightSource, NodeDecl, SylvenSpec, TokenDecl, TokenKind,
+    FoldCondition, GrammarItem, HighlightSource, NodeDecl, SylvenSpec, SymbolRule, TokenDecl,
+    TokenKind,
 };
 
 use crate::pattern::Pattern;
@@ -28,6 +29,8 @@ pub struct CompiledSpec {
     /// Compiled grammar nodes; non-empty only when the spec has a `grammar {}` block.
     /// The first entry is always the root/file node.
     pub nodes: Vec<CompiledNode>,
+    /// Compiled symbol extraction rules derived from the `symbols {}` block.
+    pub symbol_rules: Vec<CompiledSymbolRule>,
 }
 
 // ── Compiled grammar types ─────────────────────────────────────────────────────
@@ -77,6 +80,17 @@ pub enum FirstToken {
     Kind(SyntaxKind),
     /// A keyword token with this specific source text.
     Keyword { kind: SyntaxKind, text: String },
+}
+
+/// One compiled rule from the `symbols {}` block.
+#[derive(Debug, Clone)]
+pub struct CompiledSymbolRule {
+    /// The kind of the grammar node that declares this symbol.
+    pub node_kind: SyntaxKind,
+    /// The kind of the child token that is the symbol's name.
+    pub field_kind: SyntaxKind,
+    /// The symbol category shown in the editor outline.
+    pub symbol_kind: SymbolKind,
 }
 
 /// Compile a parsed `SylvenSpec` into a `CompiledSpec`. Assigns `SyntaxKind`
@@ -179,11 +193,12 @@ pub fn compile(spec: &SylvenSpec) -> CompiledSpec {
         }
     }
 
-    let nodes = if spec.grammar.is_empty() {
-        Vec::new()
+    let (nodes, symbol_rules) = if spec.grammar.is_empty() {
+        (Vec::new(), Vec::new())
     } else {
         compile_grammar(
             &spec.grammar,
+            &spec.symbols,
             &name_to_kind,
             &lit_to_kind,
             &kw_text_to_kind,
@@ -202,6 +217,7 @@ pub fn compile(spec: &SylvenSpec) -> CompiledSpec {
         bracket_pairs,
         fold_brackets,
         nodes,
+        symbol_rules,
     }
 }
 
@@ -209,11 +225,12 @@ pub fn compile(spec: &SylvenSpec) -> CompiledSpec {
 
 fn compile_grammar(
     decls: &[NodeDecl],
+    symbol_rules: &[SymbolRule],
     name_to_kind: &HashMap<&str, SyntaxKind>,
     lit_to_kind: &HashMap<&str, SyntaxKind>,
     kw_text_to_kind: &HashMap<&str, SyntaxKind>,
     next_id: &mut u16,
-) -> Vec<CompiledNode> {
+) -> (Vec<CompiledNode>, Vec<CompiledSymbolRule>) {
     // Pass 1: assign SyntaxKinds and build name→index map.
     let mut node_name_to_idx: HashMap<&str, usize> = HashMap::new();
     let mut node_kinds: Vec<SyntaxKind> = Vec::new();
@@ -253,7 +270,16 @@ fn compile_grammar(
         node.first_tokens = ft;
     }
 
-    nodes
+    // Pass 4: compile symbol rules.
+    let compiled_symbols = compile_symbol_rules(
+        symbol_rules,
+        decls,
+        &node_name_to_idx,
+        &node_kinds,
+        name_to_kind,
+    );
+
+    (nodes, compiled_symbols)
 }
 
 fn compile_node_items(
@@ -387,6 +413,87 @@ fn first_of_item(
             first_of_item(inner, nodes, visiting)
         }
     }
+}
+
+fn compile_symbol_rules(
+    rules: &[SymbolRule],
+    decls: &[NodeDecl],
+    node_name_to_idx: &HashMap<&str, usize>,
+    node_kinds: &[SyntaxKind],
+    name_to_kind: &HashMap<&str, SyntaxKind>,
+) -> Vec<CompiledSymbolRule> {
+    rules
+        .iter()
+        .filter_map(|rule| {
+            let &node_idx = node_name_to_idx.get(rule.node.as_str())?;
+            let node_kind = node_kinds[node_idx];
+            let decl = &decls[node_idx];
+            let field_kind = find_field_kind(
+                &rule.field,
+                &decl.items,
+                node_name_to_idx,
+                node_kinds,
+                name_to_kind,
+            )?;
+            let symbol_kind = parse_symbol_kind(&rule.kind)?;
+            Some(CompiledSymbolRule {
+                node_kind,
+                field_kind,
+                symbol_kind,
+            })
+        })
+        .collect()
+}
+
+fn find_field_kind(
+    label: &str,
+    items: &[GrammarItem],
+    node_name_to_idx: &HashMap<&str, usize>,
+    node_kinds: &[SyntaxKind],
+    name_to_kind: &HashMap<&str, SyntaxKind>,
+) -> Option<SyntaxKind> {
+    items.iter().find_map(|item| {
+        find_field_kind_in_item(label, item, node_name_to_idx, node_kinds, name_to_kind)
+    })
+}
+
+fn find_field_kind_in_item(
+    label: &str,
+    item: &GrammarItem,
+    node_name_to_idx: &HashMap<&str, usize>,
+    node_kinds: &[SyntaxKind],
+    name_to_kind: &HashMap<&str, SyntaxKind>,
+) -> Option<SyntaxKind> {
+    match item {
+        GrammarItem::Field { label: l, ty } if l == label => {
+            if let Some(&idx) = node_name_to_idx.get(ty.as_str()) {
+                Some(node_kinds[idx])
+            } else {
+                name_to_kind.get(ty.as_str()).copied()
+            }
+        }
+        GrammarItem::Optional(inner) | GrammarItem::Repeat(inner) => {
+            find_field_kind_in_item(label, inner, node_name_to_idx, node_kinds, name_to_kind)
+        }
+        _ => None,
+    }
+}
+
+fn parse_symbol_kind(s: &str) -> Option<SymbolKind> {
+    Some(match s {
+        "function" => SymbolKind::Function,
+        "struct" => SymbolKind::Struct,
+        "enum" => SymbolKind::Enum,
+        "trait" => SymbolKind::Trait,
+        "impl" => SymbolKind::Impl,
+        "module" => SymbolKind::Module,
+        "constant" => SymbolKind::Constant,
+        "type" => SymbolKind::TypeAlias,
+        "macro" => SymbolKind::Macro,
+        "section" => SymbolKind::Section,
+        "heading" => SymbolKind::Heading,
+        _ => return None,
+    })
 }
 
 fn compile_token_decl(decl: &TokenDecl, next_id: &mut u16) -> (Pattern, SyntaxKind, bool) {
@@ -546,11 +653,15 @@ tokens {
   whitespace /\s+/ trivia
 }
 grammar {
-  node File { TopDecl* }
+  node File    { TopDecl* }
   node TopDecl { FnDecl | LetStmt }
-  node FnDecl { "fn" ident "(" ")" Block }
-  node LetStmt { "let" ident "=" ident ";" }
-  node Block { "{" LetStmt* "}" }
+  node FnDecl  { "fn" name:ident "(" ")" Block }
+  node LetStmt { "let" name:ident "=" ident ";" }
+  node Block   { "{" LetStmt* "}" }
+}
+symbols {
+  FnDecl.name -> function
+  LetStmt.name -> constant
 }
 "#;
 
@@ -595,5 +706,25 @@ grammar {
             )
         });
         assert!(has_fn && has_let);
+    }
+
+    #[test]
+    fn symbol_rules_compiled() {
+        let spec = parse_spec(GRAMMAR_SPEC).unwrap();
+        let cs = compile(&spec);
+        assert_eq!(cs.symbol_rules.len(), 2);
+    }
+
+    #[test]
+    fn symbol_rule_fn_decl_is_function_kind() {
+        use sylven::SymbolKind;
+        let spec = parse_spec(GRAMMAR_SPEC).unwrap();
+        let cs = compile(&spec);
+        let fn_rule = cs
+            .symbol_rules
+            .iter()
+            .find(|r| r.node_kind == cs.nodes.iter().find(|n| n.name == "FnDecl").unwrap().kind)
+            .unwrap();
+        assert_eq!(fn_rule.symbol_kind, SymbolKind::Function);
     }
 }

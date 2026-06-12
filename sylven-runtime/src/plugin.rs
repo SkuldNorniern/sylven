@@ -1,7 +1,8 @@
-use sylven::{Highlight, LanguageId, LanguagePlugin, ParseResult, SyntaxFeatures};
+use sylven::{Highlight, LanguageId, LanguagePlugin, ParseResult, SymbolInfo, SyntaxFeatures};
 use sylven_lex::{SyntaxKind, Token, TokenStream};
 use sylven_parse::{Parser, build_tree};
 use sylven_text::{TextRange, TextSize, TextSnapshot};
+use sylven_tree::{SyntaxElement, SyntaxTree};
 
 use crate::compile::{CompiledItem, CompiledRule, CompiledSpec, FirstToken};
 
@@ -58,8 +59,9 @@ impl LanguagePlugin for RuntimePlugin {
         let events = parser.finish();
         let (tree, errors) = build_tree(tokens, source, events);
 
-        // 3. Derive syntax features from the token stream.
-        let features = derive_features(tokens, source, &self.spec);
+        // 3. Derive syntax features from the token stream and tree.
+        let mut features = derive_features(tokens, source, &self.spec);
+        features.symbols = extract_symbols(&tree, &self.spec);
 
         ParseResult {
             tree,
@@ -282,6 +284,46 @@ fn crosses_newline(source: &str, open: TextRange, close: TextRange) -> bool {
     source[start..end].contains('\n')
 }
 
+// ── Symbol extraction ─────────────────────────────────────────────────────────
+
+/// Walk the syntax tree and extract document symbols according to
+/// `spec.symbol_rules`. For each node whose kind matches a rule's `node_kind`,
+/// the first non-trivia child token with `field_kind` becomes the symbol name.
+fn extract_symbols(tree: &SyntaxTree, spec: &CompiledSpec) -> Vec<SymbolInfo> {
+    if spec.symbol_rules.is_empty() {
+        return Vec::new();
+    }
+    let mut symbols: Vec<SymbolInfo> = Vec::new();
+    for element in tree.root().preorder() {
+        let SyntaxElement::Node(node) = element else {
+            continue;
+        };
+        for rule in &spec.symbol_rules {
+            if node.kind() != rule.node_kind {
+                continue;
+            }
+            for child in node.children_with_tokens() {
+                let SyntaxElement::Token(tok) = child else {
+                    continue;
+                };
+                if tok.kind().is_trivia() {
+                    continue;
+                }
+                if tok.kind() == rule.field_kind {
+                    symbols.push(SymbolInfo {
+                        name: tok.text().to_string(),
+                        name_range: tok.text_range(),
+                        decl_range: node.text_range(),
+                        kind: rule.symbol_kind,
+                    });
+                    break;
+                }
+            }
+        }
+    }
+    symbols
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -428,9 +470,13 @@ tokens {
 grammar {
   node File    { TopDecl* }
   node TopDecl { FnDecl | LetStmt }
-  node FnDecl  { "fn" ident "(" ")" Block }
-  node LetStmt { "let" ident "=" ident ";" }
+  node FnDecl  { "fn" name:ident "(" ")" Block }
+  node LetStmt { "let" name:ident "=" ident ";" }
   node Block   { "{" LetStmt* "}" }
+}
+symbols {
+  FnDecl.name -> function
+  LetStmt.name -> constant
 }
 "#;
 
@@ -504,5 +550,55 @@ grammar {
         assert_eq!(result.tree.text(), src);
         let root = result.tree.root();
         assert_eq!(root.children().count(), 2, "two TopDecl nodes");
+    }
+
+    // ── Symbol extraction tests ───────────────────────────────────────────────
+
+    #[test]
+    fn symbols_extracted_for_fn_decl() {
+        use sylven::SymbolKind;
+        let src = "fn foo() {}";
+        let result = make_grammar_plugin().parse(&snap(src));
+        assert_eq!(result.features.symbols.len(), 1);
+        let sym = &result.features.symbols[0];
+        assert_eq!(sym.name, "foo");
+        assert_eq!(sym.kind, SymbolKind::Function);
+    }
+
+    #[test]
+    fn symbols_multiple_fn_decls() {
+        use sylven::SymbolKind;
+        let src = "fn a() {} fn b() {}";
+        let result = make_grammar_plugin().parse(&snap(src));
+        let fns: Vec<_> = result
+            .features
+            .symbols
+            .iter()
+            .filter(|s| s.kind == SymbolKind::Function)
+            .collect();
+        assert_eq!(fns.len(), 2);
+        assert_eq!(fns[0].name, "a");
+        assert_eq!(fns[1].name, "b");
+    }
+
+    #[test]
+    fn symbols_let_stmt_is_constant() {
+        use sylven::SymbolKind;
+        let src = "fn foo() { let x = y; }";
+        let result = make_grammar_plugin().parse(&snap(src));
+        let constants: Vec<_> = result
+            .features
+            .symbols
+            .iter()
+            .filter(|s| s.kind == SymbolKind::Constant)
+            .collect();
+        assert_eq!(constants.len(), 1);
+        assert_eq!(constants[0].name, "x");
+    }
+
+    #[test]
+    fn no_symbols_without_symbol_rules() {
+        let result = make_plugin().parse(&snap("fn foo() {}"));
+        assert!(result.features.symbols.is_empty());
     }
 }
