@@ -16,5 +16,5 @@ mod tree_builder;
 pub use error::ParseError;
 pub use event::{ParseEvent, TokenId};
 pub use parser::{Checkpoint, Parser};
-pub use region::{find_reparse_root, splice_green};
+pub use region::{find_reparse_root, splice_green, splice_region};
 pub use tree_builder::build_tree;

@@ -70,6 +70,31 @@ pub fn splice_green(
     std::sync::Arc::new(GreenNode::new(old_green.kind(), children))
 }
 
+/// Replace the child at `dirty_idx` in `old_green` with `replacement`
+/// (zero or more elements), leaving every other child untouched.
+///
+/// Used for regional reparse: `replacement` is the top-level children of a
+/// standalone reparse of just the dirty child's (possibly resized) text, and
+/// may contain a different number of elements than the single child it
+/// replaces (e.g. an edit that splits one token into several, or merges
+/// several into one).
+///
+/// Green nodes are position-independent, so every kept child's `Arc` is
+/// reused as-is.
+pub fn splice_region(
+    old_green: &GreenNode,
+    dirty_idx: usize,
+    replacement: &[GreenElement],
+) -> std::sync::Arc<GreenNode> {
+    let old_children = old_green.children();
+    let mut children: Vec<GreenElement> =
+        Vec::with_capacity(old_children.len() - 1 + replacement.len());
+    children.extend_from_slice(&old_children[..dirty_idx]);
+    children.extend_from_slice(replacement);
+    children.extend_from_slice(&old_children[dirty_idx + 1..]);
+    std::sync::Arc::new(GreenNode::new(old_green.kind(), children))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
