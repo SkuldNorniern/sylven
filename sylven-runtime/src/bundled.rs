@@ -44,8 +44,8 @@ pub fn register_bundled(registry: &mut LanguageRegistry) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sylven::{HighlightKind, LanguageId};
-    use sylven_text::{DocumentId, RevisionId, TextSnapshot};
+    use sylven::{HighlightKind, LanguageId, LanguagePlugin, ParseResult};
+    use sylven_text::{DocumentId, RevisionId, TextRange, TextSnapshot};
 
     fn snap(text: &str) -> TextSnapshot {
         TextSnapshot::new(DocumentId(0), RevisionId(0), text)
@@ -425,6 +425,130 @@ mod tests {
                 .highlights
                 .iter()
                 .any(|h| h.kind == HighlightKind::Keyword)
+        );
+    }
+
+    // ── Corpus: handwritten RustLanguage vs compiled rust.sylven ─────────────
+
+    fn highlights_of_kind(result: &ParseResult, kind: HighlightKind) -> Vec<TextRange> {
+        let mut v: Vec<_> = result
+            .features
+            .highlights
+            .iter()
+            .filter(|h| h.kind == kind)
+            .map(|h| h.range)
+            .collect();
+        v.sort_by_key(|r| r.start());
+        v
+    }
+
+    #[test]
+    fn rust_corpus_both_lossless() {
+        use sylven::lang::rust::RustLanguage;
+        let r = reg();
+        let compiled = r.get(LanguageId("rust")).unwrap();
+        let snippets = [
+            "fn main() {}",
+            "fn f() {\n    let x = 1;\n}",
+            r#"let s = "hello";"#,
+            "// comment",
+            "struct Foo {}",
+        ];
+        for src in &snippets {
+            let hw = RustLanguage.parse(&snap(src));
+            let cm = compiled.parse(&snap(src));
+            assert_eq!(hw.tree.text(), *src, "hw lossless: {src:?}");
+            assert_eq!(cm.tree.text(), *src, "compiled lossless: {src:?}");
+        }
+    }
+
+    #[test]
+    fn rust_corpus_keyword_ranges_agree() {
+        use sylven::lang::rust::RustLanguage;
+        let r = reg();
+        let compiled = r.get(LanguageId("rust")).unwrap();
+        let src = "fn main() {}";
+        let hw = RustLanguage.parse(&snap(src));
+        let cm = compiled.parse(&snap(src));
+        let hw_kw = highlights_of_kind(&hw, HighlightKind::Keyword);
+        let cm_kw = highlights_of_kind(&cm, HighlightKind::Keyword);
+        assert_eq!(hw_kw, cm_kw, "keyword ranges must agree for {src:?}");
+    }
+
+    #[test]
+    fn rust_corpus_string_ranges_agree() {
+        use sylven::lang::rust::RustLanguage;
+        let r = reg();
+        let compiled = r.get(LanguageId("rust")).unwrap();
+        let src = r#"let s = "hello";"#;
+        let hw = RustLanguage.parse(&snap(src));
+        let cm = compiled.parse(&snap(src));
+        let hw_s = highlights_of_kind(&hw, HighlightKind::String);
+        let cm_s = highlights_of_kind(&cm, HighlightKind::String);
+        assert_eq!(hw_s, cm_s, "string ranges must agree for {src:?}");
+    }
+
+    #[test]
+    fn rust_corpus_type_ranges_agree() {
+        use sylven::lang::rust::RustLanguage;
+        let r = reg();
+        let compiled = r.get(LanguageId("rust")).unwrap();
+        let src = "let x: i32 = 0;";
+        let hw = RustLanguage.parse(&snap(src));
+        let cm = compiled.parse(&snap(src));
+        let hw_t = highlights_of_kind(&hw, HighlightKind::Type);
+        let cm_t = highlights_of_kind(&cm, HighlightKind::Type);
+        assert_eq!(hw_t, cm_t, "type ranges must agree for {src:?}");
+    }
+
+    #[test]
+    fn rust_corpus_comment_ranges_agree() {
+        use sylven::lang::rust::RustLanguage;
+        let r = reg();
+        let compiled = r.get(LanguageId("rust")).unwrap();
+        // No trailing newline: lex_rust includes \n in comment token,
+        // while Pattern::LineComment stops before \n.
+        let src = "// line comment";
+        let hw = RustLanguage.parse(&snap(src));
+        let cm = compiled.parse(&snap(src));
+        let hw_c = highlights_of_kind(&hw, HighlightKind::Comment);
+        let cm_c = highlights_of_kind(&cm, HighlightKind::Comment);
+        assert_eq!(hw_c, cm_c, "comment ranges must agree for {src:?}");
+    }
+
+    #[test]
+    fn rust_corpus_folds_agree_multiline_block() {
+        use sylven::lang::rust::RustLanguage;
+        let r = reg();
+        let compiled = r.get(LanguageId("rust")).unwrap();
+        let src = "fn f() {\n    let x = 1;\n}";
+        let hw = RustLanguage.parse(&snap(src));
+        let cm = compiled.parse(&snap(src));
+        assert!(
+            !hw.features.folds.is_empty(),
+            "hw: multiline block should fold"
+        );
+        assert!(
+            !cm.features.folds.is_empty(),
+            "compiled: multiline block should fold"
+        );
+    }
+
+    #[test]
+    fn rust_corpus_symbols_gap_documented() {
+        // Known gap: rust.sylven has no grammar/symbols block.
+        // Handwritten derives symbols from the token stream; compiled produces none.
+        // Update this test when symbols are added to rust.sylven.
+        use sylven::lang::rust::RustLanguage;
+        let r = reg();
+        let compiled = r.get(LanguageId("rust")).unwrap();
+        let src = "fn foo() {}\nstruct Bar {}\n";
+        let hw = RustLanguage.parse(&snap(src));
+        let cm = compiled.parse(&snap(src));
+        assert!(!hw.features.symbols.is_empty(), "hw extracts symbols");
+        assert!(
+            cm.features.symbols.is_empty(),
+            "compiled has no symbols (gap — add symbols block to rust.sylven)"
         );
     }
 
