@@ -66,6 +66,20 @@ impl SymbolKind {
     }
 }
 
+/// One embedded-language injection: the child language and its byte range in
+/// the parent document. Produced by language plugins that embed foreign code
+/// (e.g. Markdown fenced code blocks). [`SyntaxEngine`](crate::SyntaxEngine)
+/// parses each injection with the matching child plugin and merges the
+/// offset-translated highlights into the parent result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Injection {
+    /// Language identifier (e.g. `"rust"`, `"python"`).
+    /// `None` when the fence had no language tag.
+    pub language: Option<String>,
+    /// Byte range of the code block body within the parent document.
+    pub range: TextRange,
+}
+
 /// One document symbol: name, kind, and byte ranges for the declaration and
 /// name token. The line number must be derived by the caller using a
 /// [`LineIndex`](sylven_text::LineIndex).
@@ -88,8 +102,8 @@ pub struct SyntaxFeatures {
     pub folds: Vec<TextRange>,
     /// Document symbols (functions, types, modules, …).
     pub symbols: Vec<SymbolInfo>,
-    /// Embedded-language injection ranges.
-    pub injections: Vec<TextRange>,
+    /// Embedded-language injection regions with their child language tags.
+    pub injections: Vec<Injection>,
     /// Matching bracket/delimiter pairs.
     pub brackets: Vec<(TextRange, TextRange)>,
 }

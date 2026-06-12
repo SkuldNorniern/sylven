@@ -11,7 +11,7 @@ use sylven_text::{LineIndex, TextRange, TextSize, TextSnapshot};
 
 use crate::{
     LanguageId, LanguagePlugin, ParseResult, SyntaxFeatures,
-    result::{Highlight, HighlightKind, SymbolInfo, SymbolKind},
+    result::{Highlight, HighlightKind, Injection, SymbolInfo, SymbolKind},
 };
 
 /// Node kind for the flat root FILE node.
@@ -58,7 +58,7 @@ fn derive_features(tokens: &[sylven_lex::Token], source: &str) -> SyntaxFeatures
         highlights: derive_highlights(tokens),
         folds: derive_folds(tokens, source),
         symbols: derive_symbols(tokens, source),
-        injections: derive_injections(tokens),
+        injections: derive_injections(tokens, source),
         brackets: Vec::new(),
     }
 }
@@ -235,20 +235,26 @@ fn derive_symbols(tokens: &[sylven_lex::Token], source: &str) -> Vec<SymbolInfo>
 // Injections — fenced code block bodies
 // ---------------------------------------------------------------------------
 
-fn derive_injections(tokens: &[sylven_lex::Token]) -> Vec<TextRange> {
+fn derive_injections(tokens: &[sylven_lex::Token], source: &str) -> Vec<Injection> {
     let mut injections = Vec::new();
     let mut in_fence = false;
+    let mut language: Option<String> = None;
     let mut body: Option<(TextSize, TextSize)> = None;
 
     for tok in tokens {
         if tok.kind == MarkdownKind::CodeFenceDelim.to_syntax() {
             if in_fence {
                 if let Some((start, end)) = body.take() {
-                    injections.push(TextRange::new(start, end));
+                    injections.push(Injection {
+                        language: language.take(),
+                        range: TextRange::new(start, end),
+                    });
                 }
+                language = None;
                 in_fence = false;
             } else {
                 in_fence = true;
+                language = fence_language(source, tok.range);
             }
         } else if in_fence && tok.kind == MarkdownKind::CodeBlockBody.to_syntax() {
             body = Some(match body {
@@ -259,6 +265,21 @@ fn derive_injections(tokens: &[sylven_lex::Token]) -> Vec<TextRange> {
     }
 
     injections
+}
+
+/// Extracts the language tag from a fenced code block's opening
+/// [`MarkdownKind::CodeFenceDelim`] token, e.g. `` ```rust `` -> `"rust"`.
+/// Returns `None` for a bare fence with no language tag.
+fn fence_language(source: &str, range: TextRange) -> Option<String> {
+    let s = range.start().to_usize();
+    let e = range.end().to_usize();
+    if e > source.len() || s >= e {
+        return None;
+    }
+    let text = source[s..e].trim_start();
+    let after_fence = text.trim_start_matches(['`', '~']);
+    let lang = after_fence.split_whitespace().next()?;
+    Some(lang.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -368,11 +389,21 @@ mod tests {
         let src = "```rust\nlet x = 1;\nlet y = 2;\n```\n";
         let f = features(src);
         assert_eq!(f.injections.len(), 1);
-        let r = f.injections[0];
+        let inj = &f.injections[0];
+        assert_eq!(inj.language.as_deref(), Some("rust"));
+        let r = inj.range;
         assert_eq!(
             &src[r.start().to_usize()..r.end().to_usize()],
             "let x = 1;\nlet y = 2;"
         );
+    }
+
+    #[test]
+    fn injection_language_none_for_bare_fence() {
+        let src = "```\nplain text\n```\n";
+        let f = features(src);
+        assert_eq!(f.injections.len(), 1);
+        assert_eq!(f.injections[0].language, None);
     }
 
     #[test]
