@@ -334,9 +334,21 @@ mod tests {
         assert_eq!(MiniOxygen.id(), LanguageId("mini-oxygen"));
     }
 
+    /// a sample from an `oxygen` checkout next to this repo; none when
+    /// there is no such checkout, and the test has nothing to read.
+    fn oxygen_sample(name: &str) -> Option<String> {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../oxygen/sample")
+            .join(format!("{name}.oxy"));
+        std::fs::read_to_string(path).ok()
+    }
+
     #[test]
     fn parses_helloworld_sample_without_errors() {
-        let source = include_str!("../../../oxygen/sample/helloworld.oxy");
+        let Some(source) = oxygen_sample("helloworld") else {
+            return;
+        };
+        let source = source.as_str();
         let result = parse(source);
         assert!(result.errors.is_empty(), "errors: {:?}", result.errors);
         assert_eq!(result.tree.text(), source);
@@ -345,7 +357,10 @@ mod tests {
 
     #[test]
     fn parses_fibonacci_sample_without_errors() {
-        let source = include_str!("../../../oxygen/sample/fibonacci.oxy");
+        let Some(source) = oxygen_sample("fibonacci") else {
+            return;
+        };
+        let source = source.as_str();
         let result = parse(source);
         assert!(result.errors.is_empty(), "errors: {:?}", result.errors);
         assert_eq!(result.tree.text(), source);
