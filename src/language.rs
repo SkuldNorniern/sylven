@@ -25,4 +25,11 @@ pub trait LanguagePlugin: Send + Sync {
     /// stage (plan.md "Incremental parsing levels 0-4"); every plugin must
     /// support full reparse regardless.
     fn parse(&self, snapshot: &TextSnapshot) -> ParseResult;
+
+    /// Whether one top-level child can be reparsed alone. A language whose
+    /// features reach across the whole file from any edit (markdown heading
+    /// folds run to the next heading) says no and always gets a full parse.
+    fn regional(&self) -> bool {
+        true
+    }
 }

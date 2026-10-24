@@ -47,6 +47,11 @@ impl LanguagePlugin for MarkdownLanguage {
             features,
         }
     }
+
+    fn regional(&self) -> bool {
+        // a new `#` line changes the folds of every section after it
+        false
+    }
 }
 
 // ---------------------------------------------------------------------------

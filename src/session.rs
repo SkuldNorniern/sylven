@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use sylven_parse::{ParseError, find_reparse_root, splice_green, splice_region};
 use sylven_text::{TextEdit, TextRange, TextSize, TextSnapshot};
-use sylven_tree::{SyntaxElement, SyntaxNode, SyntaxTree};
+use sylven_tree::{GreenElement, SyntaxElement, SyntaxNode, SyntaxTree};
 
 use crate::{
     Highlight, Injection, LanguageId, ParseResult, SymbolInfo, SyntaxEngine, SyntaxFeatures,
@@ -113,11 +113,21 @@ impl SyntaxSession {
         new_snapshot: &TextSnapshot,
     ) -> Option<ParseResult> {
         let old_result = self.result.as_ref()?;
+        if !self.engine.registry().get(self.language)?.regional() {
+            return None;
+        }
         let old_root = old_result.tree.root();
 
         let dirty_idx = find_reparse_root(&old_root, edit.delete)?;
         let old_child = old_root.children_with_tokens().nth(dirty_idx)?;
         let old_child_range = old_child.text_range();
+
+        // an edit right at the start of a child can join it to what comes
+        // before (text typed after a paragraph, say); only the trailing side
+        // is probed below, so leave those to a full parse
+        if edit.delete.start() <= old_child_range.start() || old_child_range.is_empty() {
+            return None;
+        }
 
         let delta: isize = edit.insert.len() as isize
             - (edit.delete.end() - edit.delete.start()).to_usize() as isize;
@@ -125,18 +135,32 @@ impl SyntaxSession {
         let new_text = new_snapshot.text();
         let new_start = old_child_range.start();
         let new_end = shift_size(old_child_range.end(), delta);
-        if new_start == new_end || new_end.to_usize() > new_text.len() {
+        // an edit that doesn't fit the old snapshot can't be trusted here
+        if new_end <= new_start
+            || new_end.to_usize() > new_text.len()
+            || !new_text.is_char_boundary(new_start.to_usize())
+            || !new_text.is_char_boundary(new_end.to_usize())
+        {
             return None;
         }
         let sub_source = &new_text[new_start.to_usize()..new_end.to_usize()];
 
-        // Boundary-stability probe: reparse the dirty text plus one extra
-        // trailing character of real document context. If the last token of
-        // `sub_source` would extend further given that extra context, an
-        // edit in isolation can't be trusted — fall back to a full parse.
-        if new_end.to_usize() < new_text.len() {
-            let extra_len = new_text[new_end.to_usize()..].chars().next()?.len_utf8();
-            let probe_source = &new_text[new_start.to_usize()..new_end.to_usize() + extra_len];
+        // Boundary-stability probe: reparse the dirty text together with
+        // the next child. The last token of `sub_source` must not run on
+        // into it, and the next child must come out as the same tokens it
+        // was: some lexers carry state across (a markdown fence only starts
+        // a line), so text typed here can change how what follows lexes.
+        let next = old_root
+            .children_with_tokens()
+            .nth(dirty_idx + 1)
+            .filter(|next| !next.text_range().is_empty());
+        if let Some(next) = next {
+            let next_len = next.text_range().len().to_usize();
+            let probe_end = new_end.to_usize() + next_len;
+            if probe_end > new_text.len() || !new_text.is_char_boundary(probe_end) {
+                return None;
+            }
+            let probe_source = &new_text[new_start.to_usize()..probe_end];
             let probe_snapshot = TextSnapshot::new(
                 new_snapshot.document_id(),
                 new_snapshot.revision(),
@@ -144,7 +168,24 @@ impl SyntaxSession {
             );
             let probe_result = self.engine.parse(self.language, &probe_snapshot)?;
             let boundary = TextSize::from(sub_source.len() as u32);
-            if token_spans_boundary(&probe_result.tree.root(), boundary) {
+            let probe_root = probe_result.tree.root();
+            if token_spans_boundary(&probe_root, boundary) {
+                return None;
+            }
+            // a construct begun in the region that now runs on past it (a new
+            // heading folding the sections after it) needs the whole file
+            let past = |r: TextRange| r.start() < boundary && r.end() > boundary;
+            let features = &probe_result.features;
+            if features.folds.iter().any(|r| past(*r))
+                || features.symbols.iter().any(|s| past(s.decl_range))
+            {
+                return None;
+            }
+            let mut after = Vec::new();
+            collect_tokens(&SyntaxElement::Node(probe_root), Some(boundary), &mut after);
+            let mut before = Vec::new();
+            collect_tokens(&next, None, &mut before);
+            if after != before {
                 return None;
             }
         }
@@ -167,11 +208,36 @@ impl SyntaxSession {
             return None;
         }
 
-        let spliced_green = splice_region(
-            old_result.tree.green(),
-            dirty_idx,
-            sub_result.tree.green().children(),
-        );
+        // an error where the sub parse ran out of text says what the end of
+        // the region looked like, not what the file has after it
+        let sub_len = TextSize::from(sub_source.len() as u32);
+        if sub_result.errors.iter().any(|e| e.range.end() >= sub_len) {
+            return None;
+        }
+        // a feature from outside reaching into the region (a heading fold
+        // over a whole section, say) only a full parse can redo
+        if reaches_into(&old_result.features, old_child_range) {
+            return None;
+        }
+
+        // brackets pair across the whole file; swapping a region that has
+        // a bracket pairing with something outside it (before or after the
+        // edit) would leave pairs and folds out of date
+        let old_green = old_result.tree.green().children().get(dirty_idx)?;
+        if !brackets_self_contained(std::slice::from_ref(old_green))
+            || !brackets_self_contained(sub_children)
+        {
+            return None;
+        }
+
+        // the sub parse ends with its own empty EOF token; the file has one
+        let mut replacement = sub_children;
+        if let Some(GreenElement::Token(last)) = replacement.last()
+            && last.text().is_empty()
+        {
+            replacement = &replacement[..replacement.len() - 1];
+        }
+        let spliced_green = splice_region(old_result.tree.green(), dirty_idx, replacement);
         let spliced_tree = SyntaxTree::new(spliced_green);
         if spliced_tree.text() != new_text {
             return None;
@@ -197,6 +263,82 @@ impl SyntaxSession {
             errors,
             features,
         })
+    }
+}
+
+/// `true` when a fold, highlight, symbol or bracket starts outside `child`
+/// and ends inside it, past it, or right where it starts (text added there
+/// can carry on the construct before it, like a markdown paragraph).
+fn reaches_into(features: &SyntaxFeatures, child: TextRange) -> bool {
+    let crosses = |r: TextRange| {
+        r.start() < child.start() && r.end() >= child.start()
+            || r.start() < child.end() && r.end() > child.end() && r.start() >= child.start()
+    };
+    features.folds.iter().any(|r| crosses(*r))
+        || features.highlights.iter().any(|h| crosses(h.range))
+        || features.symbols.iter().any(|s| crosses(s.decl_range))
+        || features
+            .brackets
+            .iter()
+            .any(|(a, b)| crosses(TextRange::new(a.start(), b.end())))
+}
+
+/// `true` when every bracket token among `elements` pairs with one of its
+/// kind inside them, so none of them pairs with anything outside.
+fn brackets_self_contained(elements: &[GreenElement]) -> bool {
+    fn walk(elements: &[GreenElement], depth: &mut [usize; 3]) -> bool {
+        for element in elements {
+            match element {
+                GreenElement::Node(node) => {
+                    if !walk(node.children(), depth) {
+                        return false;
+                    }
+                }
+                GreenElement::Token(token) => {
+                    let (slot, open) = match token.text() {
+                        "(" => (0, true),
+                        ")" => (0, false),
+                        "[" => (1, true),
+                        "]" => (1, false),
+                        "{" => (2, true),
+                        "}" => (2, false),
+                        _ => continue,
+                    };
+                    if open {
+                        depth[slot] += 1;
+                    } else if depth[slot] == 0 {
+                        return false;
+                    } else {
+                        depth[slot] -= 1;
+                    }
+                }
+            }
+        }
+        true
+    }
+    let mut depth = [0; 3];
+    walk(elements, &mut depth) && depth == [0; 3]
+}
+
+/// kind and text of the non-empty tokens under `element`, only those that
+/// start at or after `from` when given.
+fn collect_tokens(
+    element: &SyntaxElement,
+    from: Option<TextSize>,
+    out: &mut Vec<(sylven_lex::SyntaxKind, String)>,
+) {
+    match element {
+        SyntaxElement::Node(node) => {
+            for child in node.children_with_tokens() {
+                collect_tokens(&child, from, out);
+            }
+        }
+        SyntaxElement::Token(token) => {
+            let range = token.text_range();
+            if !range.is_empty() && from.is_none_or(|f| range.start() >= f) {
+                out.push((token.kind(), token.text().to_owned()));
+            }
+        }
     }
 }
 
@@ -487,6 +629,144 @@ mod tests {
 
     fn markdown_session() -> SyntaxSession {
         SyntaxSession::new(engine_with_markdown(), LanguageId("markdown"))
+    }
+
+    /// every one char insert and delete in `src` gives what a full parse
+    /// of the new text gives: tree, errors and features.
+    fn every_small_edit_matches_full(make: fn() -> SyntaxSession, src: &str, insert: &str) {
+        let mut cuts: Vec<usize> = (0..=src.len())
+            .filter(|&i| src.is_char_boundary(i))
+            .collect();
+        cuts.dedup();
+        let mut edits = Vec::new();
+        for &at in &cuts {
+            edits.push(TextEdit::insert(TextSize::from(at as u32), insert));
+        }
+        for pair in cuts.windows(2) {
+            let range = TextRange::new(
+                TextSize::from(pair[0] as u32),
+                TextSize::from(pair[1] as u32),
+            );
+            edits.push(TextEdit::replace(range, ""));
+        }
+        for edit in edits {
+            let mut incremental = make();
+            incremental.parse(snap(src)).unwrap();
+            let new_src = edit.apply(src);
+            let got = incremental.parse_edit(&edit, snap(&new_src)).unwrap();
+            let mut full = make();
+            let want = full.parse(snap(&new_src)).unwrap();
+            let at = format!("{src:?} {edit:?}");
+            assert_eq!(got.tree.green(), want.tree.green(), "tree at {at}");
+            assert_eq!(got.errors, want.errors, "errors at {at}");
+            assert_eq!(got.features, want.features, "features at {at}");
+        }
+    }
+
+    #[test]
+    fn small_edits_match_full_parse_with_brackets_across_statements() {
+        for src in [
+            "let x = 1;
+let y = 2);",
+            "let a = (1;
+let b = 2;
+let c = 3);",
+            "f(1);
+g(2);",
+        ] {
+            for insert in [
+                "(", ")", "x", "
+",
+            ] {
+                every_small_edit_matches_full(session, src, insert);
+            }
+        }
+    }
+
+    type MakeSession = fn() -> SyntaxSession;
+
+    fn rust_session() -> SyntaxSession {
+        SyntaxSession::new(Arc::new(SyntaxEngine::new()), LanguageId("rust"))
+    }
+
+    fn toml_session() -> SyntaxSession {
+        SyntaxSession::new(Arc::new(SyntaxEngine::new()), LanguageId("toml"))
+    }
+
+    fn json_session() -> SyntaxSession {
+        SyntaxSession::new(Arc::new(SyntaxEngine::new()), LanguageId("json"))
+    }
+
+    fn yaml_session() -> SyntaxSession {
+        SyntaxSession::new(Arc::new(SyntaxEngine::new()), LanguageId("yaml"))
+    }
+
+    #[test]
+    fn small_edits_match_full_parse_in_rust_toml_json_yaml() {
+        let cases: [(MakeSession, &str); 4] = [
+            (
+                rust_session,
+                "fn a() {
+    let x = \"가\";
+}
+// c
+fn b() { 1 }
+",
+            ),
+            (
+                toml_session,
+                "[a]
+x = 1
+y = \"s\"
+[b]
+z = [1, 2]
+",
+            ),
+            (
+                json_session,
+                "{\"a\": [1, {\"b\": null}],
+ \"c\": \"d\"}",
+            ),
+            (
+                yaml_session,
+                "a: 1
+b:
+  - x
+  - {y: 2}
+",
+            ),
+        ];
+        for (make, src) in cases {
+            for insert in [
+                "{", "}", "\"", "x", "
+", "/",
+            ] {
+                every_small_edit_matches_full(make, src, insert);
+            }
+        }
+    }
+
+    #[test]
+    fn small_edits_match_full_parse_at_the_end_of_markdown() {
+        for src in [
+            "# t
+
+para
+",
+            "a
+
+```rust
+fn f() {}
+```
+b",
+        ] {
+            for insert in [
+                "x", "`", "
+", "#",
+            ] {
+                every_small_edit_matches_full(markdown_session, src, insert);
+            }
+        }
     }
 
     #[test]
