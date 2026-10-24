@@ -615,27 +615,15 @@ mod tests {
         let cases = [
             (
                 "c",
-                "int f(int a) {
-  return a; /* x */
-}
-int g() { return \"s\"; }
-",
+                "int f(int a) {\n  return a; /* x */\n}\nint g() { return \"s\"; }\n",
             ),
             (
                 "python",
-                "def f(a):
-    return [a, \"가\"]
-
-class B:
-    pass
-",
+                "def f(a):\n    return [a, \"가\"]\n\nclass B:\n    pass\n",
             ),
             (
                 "verilog",
-                "module m(input a);
-  assign b = (a);
-endmodule
-",
+                "module m(input a);\n  assign b = (a);\nendmodule\n",
             ),
         ];
         let snap =
@@ -645,10 +633,7 @@ endmodule
                 .filter(|&i| src.is_char_boundary(i))
                 .collect();
             let mut edits = Vec::new();
-            for insert in [
-                "(", ")", "{", "\"", "x", "
-",
-            ] {
+            for insert in ["(", ")", "{", "\"", "x", "\n", "\r\n"] {
                 for &at in &cuts {
                     edits.push(TextEdit::insert(TextSize::from(at as u32), insert));
                 }

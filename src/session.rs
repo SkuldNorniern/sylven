@@ -150,10 +150,12 @@ impl SyntaxSession {
         // into it, and the next child must come out as the same tokens it
         // was: some lexers carry state across (a markdown fence only starts
         // a line), so text typed here can change how what follows lexes.
+        // the next child with text: a zero width one in between hides
+        // nothing and must not let the probe be skipped
         let next = old_root
             .children_with_tokens()
-            .nth(dirty_idx + 1)
-            .filter(|next| !next.text_range().is_empty());
+            .skip(dirty_idx + 1)
+            .find(|next| !next.text_range().is_empty());
         if let Some(next) = next {
             let next_len = next.text_range().len().to_usize();
             let probe_end = new_end.to_usize() + next_len;
@@ -665,19 +667,13 @@ mod tests {
 
     #[test]
     fn small_edits_match_full_parse_with_brackets_across_statements() {
-        for src in [
-            "let x = 1;
-let y = 2);",
-            "let a = (1;
-let b = 2;
-let c = 3);",
-            "f(1);
-g(2);",
-        ] {
-            for insert in [
-                "(", ")", "x", "
-",
-            ] {
+        let sources = [
+            "let x = 1;\nlet y = 2);",
+            "let a = (1;\nlet b = 2;\nlet c = 3);",
+            "f(1);\ng(2);",
+        ];
+        for src in sources {
+            for insert in ["(", ")", "x", "\n"] {
                 every_small_edit_matches_full(session, src, insert);
             }
         }
@@ -706,64 +702,28 @@ g(2);",
         let cases: [(MakeSession, &str); 4] = [
             (
                 rust_session,
-                "fn a() {
-    let x = \"가\";
-}
-// c
-fn b() { 1 }
-",
+                "fn a() {\n    let x = \"가\";\n}\n// c\nfn b() { 1 }\n",
             ),
-            (
-                toml_session,
-                "[a]
-x = 1
-y = \"s\"
-[b]
-z = [1, 2]
-",
-            ),
-            (
-                json_session,
-                "{\"a\": [1, {\"b\": null}],
- \"c\": \"d\"}",
-            ),
-            (
-                yaml_session,
-                "a: 1
-b:
-  - x
-  - {y: 2}
-",
-            ),
+            (toml_session, "[a]\nx = 1\ny = \"s\"\n[b]\nz = [1, 2]\n"),
+            (json_session, "{\"a\": [1, {\"b\": null}],\n \"c\": \"d\"}"),
+            (yaml_session, "a: 1\nb:\n  - x\n  - {y: 2}\n"),
         ];
         for (make, src) in cases {
-            for insert in [
-                "{", "}", "\"", "x", "
-", "/",
-            ] {
+            for insert in ["{", "}", "\"", "x", "\n", "/", "\r\n", "ab("] {
                 every_small_edit_matches_full(make, src, insert);
             }
         }
+        // crlf files: an edit can land between \r and \n
+        let crlf = "fn a() {\r\n    1\r\n}\r\nfn b() {}\r\n";
+        every_small_edit_matches_full(rust_session, crlf, "\n");
+        every_small_edit_matches_full(toml_session, "[a]\r\nx = 1\r\n", "\r");
     }
 
     #[test]
     fn small_edits_match_full_parse_at_the_end_of_markdown() {
-        for src in [
-            "# t
-
-para
-",
-            "a
-
-```rust
-fn f() {}
-```
-b",
-        ] {
-            for insert in [
-                "x", "`", "
-", "#",
-            ] {
+        let sources = ["# t\n\npara\n", "a\n\n```rust\nfn f() {}\n```\nb"];
+        for src in sources {
+            for insert in ["x", "`", "\n", "#"] {
                 every_small_edit_matches_full(markdown_session, src, insert);
             }
         }
