@@ -85,7 +85,9 @@ impl Pattern {
                 let mut i = 1;
                 while i < b.len() {
                     if b[i] == b'\\' {
-                        i += 2; // skip escaped char
+                        // skip the escaped char; a backslash at the very
+                        // end has nothing to skip
+                        i = (i + 2).min(b.len());
                     } else if &b[i] == delim {
                         i += 1; // include closing delimiter
                         return Some(i);

@@ -573,4 +573,105 @@ mod tests {
                 .any(|h| h.kind == HighlightKind::Comment)
         );
     }
+
+    fn engine() -> Arc<sylven::SyntaxEngine> {
+        Arc::new(sylven::SyntaxEngine::with_registry(reg()))
+    }
+
+    fn parse(lang: &'static str, src: &str) -> sylven::ParseResult {
+        let snap = sylven::TextSnapshot::new(sylven::DocumentId(0), sylven::RevisionId(0), src);
+        engine().parse(LanguageId(lang), &snap).expect("registered")
+    }
+
+    #[test]
+    fn string_ending_in_a_backslash_parses() {
+        for lang in ["c", "python", "vhdl", "sdc", "verilog", "rust"] {
+            for src in ["x = \"abc\\", "'\\", "\"가\\"] {
+                assert_eq!(parse(lang, src).tree.text(), src, "{lang} {src:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn closers_without_openers_stay_linear() {
+        let src = "[)".repeat(50_000);
+        let started = std::time::Instant::now();
+        let result = parse("c", &src);
+        assert_eq!(result.tree.text(), src);
+        // the old scan of every open bracket took seconds here
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        let mixed = parse("c", "( [ ) ]");
+        assert_eq!(
+            mixed.features.brackets.len(),
+            2,
+            "each closer finds its own kind"
+        );
+    }
+
+    #[test]
+    fn small_edits_match_full_parse_in_runtime_languages() {
+        use sylven::SyntaxSession;
+        use sylven_text::{TextEdit, TextRange, TextSize};
+        let cases = [
+            (
+                "c",
+                "int f(int a) {
+  return a; /* x */
+}
+int g() { return \"s\"; }
+",
+            ),
+            (
+                "python",
+                "def f(a):
+    return [a, \"가\"]
+
+class B:
+    pass
+",
+            ),
+            (
+                "verilog",
+                "module m(input a);
+  assign b = (a);
+endmodule
+",
+            ),
+        ];
+        let snap =
+            |t: &str| sylven::TextSnapshot::new(sylven::DocumentId(0), sylven::RevisionId(0), t);
+        for (lang, src) in cases {
+            let cuts: Vec<usize> = (0..=src.len())
+                .filter(|&i| src.is_char_boundary(i))
+                .collect();
+            let mut edits = Vec::new();
+            for insert in [
+                "(", ")", "{", "\"", "x", "
+",
+            ] {
+                for &at in &cuts {
+                    edits.push(TextEdit::insert(TextSize::from(at as u32), insert));
+                }
+            }
+            for pair in cuts.windows(2) {
+                let range = TextRange::new(
+                    TextSize::from(pair[0] as u32),
+                    TextSize::from(pair[1] as u32),
+                );
+                edits.push(TextEdit::replace(range, ""));
+            }
+            for edit in edits {
+                let mut s = SyntaxSession::new(engine(), LanguageId(lang));
+                s.parse(snap(src)).unwrap();
+                let new_src = edit.apply(src);
+                let got = s.parse_edit(&edit, snap(&new_src)).unwrap().clone();
+                let mut full = SyntaxSession::new(engine(), LanguageId(lang));
+                let want = full.parse(snap(&new_src)).unwrap();
+                let at = format!("{lang} {src:?} {edit:?}");
+                assert_eq!(got.tree.green(), want.tree.green(), "tree at {at}");
+                assert_eq!(got.errors, want.errors, "errors at {at}");
+                assert_eq!(got.features, want.features, "features at {at}");
+            }
+        }
+    }
 }

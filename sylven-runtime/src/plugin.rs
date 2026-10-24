@@ -183,6 +183,12 @@ fn runtime_lex(source: &str, spec: &CompiledSpec) -> Vec<Token> {
 
         for (pattern, kind, _is_trivia) in &spec.matchers {
             if let Some(len) = pattern.match_at(remaining) {
+                // never past the end or into the middle of a char, whatever
+                // a pattern reports
+                let mut len = len.min(remaining.len());
+                while !remaining.is_char_boundary(len) {
+                    len -= 1;
+                }
                 if len == 0 {
                     continue;
                 }
@@ -227,7 +233,13 @@ fn derive_features(tokens: &[Token], source: &str, spec: &CompiledSpec) -> Synta
     let mut folds: Vec<TextRange> = Vec::new();
 
     // Stack of (open_kind, open_range) for bracket matching.
-    let mut open_stack: Vec<(SyntaxKind, TextRange)> = Vec::new();
+    // one stack per opener kind: a closer pairs with the latest opener of
+    // its own kind, found at once instead of by a scan of every open one
+    let mut open_stacks: Vec<(SyntaxKind, Vec<TextRange>)> = spec
+        .bracket_pairs
+        .iter()
+        .map(|&(open, _)| (open, Vec::new()))
+        .collect();
 
     for tok in tokens {
         if tok.kind == SyntaxKind::EOF {
@@ -244,19 +256,19 @@ fn derive_features(tokens: &[Token], source: &str, spec: &CompiledSpec) -> Synta
 
         if spec.fold_brackets {
             // Check if this is an open bracket.
-            for &(open_kind, _close_kind) in &spec.bracket_pairs {
-                if tok.kind == open_kind {
-                    open_stack.push((open_kind, tok.range));
-                    break;
-                }
+            if let Some((_, stack)) = open_stacks.iter_mut().find(|(k, _)| *k == tok.kind) {
+                stack.push(tok.range);
             }
 
             // Check if this is a close bracket that matches the top of the stack.
             for &(open_kind, close_kind) in &spec.bracket_pairs {
                 if tok.kind == close_kind {
                     // Pop the most recent matching open.
-                    if let Some(pos) = open_stack.iter().rposition(|(k, _)| *k == open_kind) {
-                        let (_, open_range) = open_stack.remove(pos);
+                    let open = open_stacks
+                        .iter_mut()
+                        .find(|(k, _)| *k == open_kind)
+                        .and_then(|(_, stack)| stack.pop());
+                    if let Some(open_range) = open {
                         brackets.push((open_range, tok.range));
 
                         // Emit a fold only when they span multiple lines.
