@@ -18,6 +18,12 @@ pub enum HighlightKind {
     Attribute,
     Macro,
     Lifetime,
+    /// A name in ALL CAPS: a constant or a static.
+    Constant,
+    /// A field or property reached with `.`.
+    Property,
+    /// A module or namespace in a path (`std::`).
+    Namespace,
     /// A `[section]` / `[[array of tables]]` header (TOML, INI, …).
     SectionHeader,
 }
