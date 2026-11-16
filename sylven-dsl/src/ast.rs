@@ -120,6 +120,20 @@ pub struct HighlightRule {
     pub source: HighlightSource,
     /// Theme scope name, e.g. `"keyword"`, `"function.definition"`.
     pub scope: String,
+    /// Conditions on the token's neighbours; all must hold. Empty for a
+    /// plain `token name -> scope` rule.
+    pub when: Vec<HighlightCond>,
+}
+
+/// When a `token` highlight rule applies, from what is around the token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HighlightCond {
+    /// `before "("`: the next token that isn't trivia has this text.
+    Before(String),
+    /// `after "fn"`: the token before, trivia skipped, has this text.
+    After(String),
+    /// `capitalized`: the token's text starts with an ASCII capital.
+    Capitalized,
 }
 
 #[derive(Debug, Clone)]

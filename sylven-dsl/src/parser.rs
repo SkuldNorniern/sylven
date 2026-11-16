@@ -1,7 +1,7 @@
 use crate::ast::{
-    Assoc, FoldCondition, FoldRule, GrammarItem, HighlightRule, HighlightSource, LanguageMeta,
-    NodeDecl, PrattInfix, PrattPrefix, PrattSpec, RecoveryRule, RecoveryStrategy, SylvenSpec,
-    SymbolRule, TokenDecl, TokenKind,
+    Assoc, FoldCondition, FoldRule, GrammarItem, HighlightCond, HighlightRule, HighlightSource,
+    LanguageMeta, NodeDecl, PrattInfix, PrattPrefix, PrattSpec, RecoveryRule, RecoveryStrategy,
+    SylvenSpec, SymbolRule, TokenDecl, TokenKind,
 };
 use crate::lexer::{TK, Token, lex};
 
@@ -513,8 +513,29 @@ impl Parser {
             let Some(first) = self.expect_word() else {
                 break;
             };
+            let mut when = Vec::new();
             let source = if first == "token" {
                 let name = self.expect_word().unwrap_or_default();
+                // `before "x"`, `after "x"`, `capitalized`, any number of them
+                loop {
+                    if self.at_word("before") || self.at_word("after") {
+                        let before = self.at_word("before");
+                        self.advance();
+                        let Some(text) = self.expect_str() else {
+                            break;
+                        };
+                        when.push(if before {
+                            HighlightCond::Before(text)
+                        } else {
+                            HighlightCond::After(text)
+                        });
+                    } else if self.at_word("capitalized") {
+                        self.advance();
+                        when.push(HighlightCond::Capitalized);
+                    } else {
+                        break;
+                    }
+                }
                 HighlightSource::Token(name)
             } else {
                 // `Node.field` — split on the first dot.
@@ -533,7 +554,11 @@ impl Parser {
                 break;
             }
             let scope = self.expect_word().unwrap_or_default();
-            rules.push(HighlightRule { source, scope });
+            rules.push(HighlightRule {
+                source,
+                scope,
+                when,
+            });
         }
         self.expect(TK::RBrace);
         rules
