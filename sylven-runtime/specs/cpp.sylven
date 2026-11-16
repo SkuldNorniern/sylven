@@ -104,6 +104,9 @@ highlight {
   token ident after "typename" -> type
   token ident after "namespace" -> type
   token ident before "(" -> function
+  token ident after "." -> property
+  token ident upper -> constant
+  token ident before "::" -> namespace
   token control       -> keyword.control
   token keyword       -> keyword
   token builtin.type  -> type

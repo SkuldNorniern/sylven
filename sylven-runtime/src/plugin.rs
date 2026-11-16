@@ -260,6 +260,14 @@ fn holds(cond: &HighlightCond, tokens: &[Token], i: usize, source: &str) -> bool
             .bytes()
             .next()
             .is_some_and(|b| b.is_ascii_uppercase()),
+        HighlightCond::Upper => {
+            let text = text_of(&tokens[i], source).as_bytes();
+            text.len() > 1
+                && text.iter().any(u8::is_ascii_uppercase)
+                && text
+                    .iter()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || *b == b'_')
+        }
     }
 }
 

@@ -93,6 +93,8 @@ highlight {
   token ident after "class" -> type
   token ident after "module" -> type
   token ident before "(" -> function
+  token ident after "." -> property
+  token ident upper -> constant
   token ident capitalized -> type
   token control       -> keyword.control
   token keyword       -> keyword

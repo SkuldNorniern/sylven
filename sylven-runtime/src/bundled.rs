@@ -365,6 +365,65 @@ mod tests {
         }
     }
 
+    /// `word` (any whole match of it in `src`) is lit as `kind`.
+    fn lit_as(lang: &'static str, src: &str, expect: &[(&str, HighlightKind)]) {
+        let r = reg();
+        let result = r.get(LanguageId(lang)).unwrap().parse(&snap(src));
+        assert_eq!(result.tree.text(), src, "{lang} lossless");
+        for (word, kind) in expect {
+            let lit = src.match_indices(word).any(|(at, _)| {
+                result.features.highlights.iter().any(|h| {
+                    h.range.start().to_usize() == at
+                        && h.range.end().to_usize() == at + word.len()
+                        && h.kind == *kind
+                })
+            });
+            assert!(lit, "{lang}: {word} as {kind:?}");
+        }
+    }
+
+    #[test]
+    fn rust_lights_attributes_lifetimes_constants_fields_and_paths() {
+        use HighlightKind::*;
+        lit_as(
+            "rust",
+            "#[derive(Debug)]\nstruct Foo<'a> { x: &'a str }\nconst MAX_LEN: u64 = 1_000u64;\nfn f(v: Foo) -> char { std::mem::drop(v.x); println!(\"{}\", 0xFF); 'c' }\n",
+            &[
+                ("#[", Attribute),
+                ("derive", Attribute),
+                ("'a", Lifetime),
+                ("MAX_LEN", Constant),
+                ("1_000u64", Number),
+                ("0xFF", Number),
+                ("std", Namespace),
+                ("mem", Namespace),
+                ("drop", Function),
+                ("x", Property),
+                ("println", Macro),
+                ("'c'", String),
+                ("Foo", Type),
+            ],
+        );
+    }
+
+    #[test]
+    fn python_lights_decorators_self_and_constants() {
+        use HighlightKind::*;
+        lit_as(
+            "python",
+            "@cached\ndef run(self, n=1e3):\n    return self.items[MAX_SIZE]\n",
+            &[
+                ("cached", Attribute),
+                ("run", Function),
+                ("self", Variable),
+                ("items", Property),
+                ("MAX_SIZE", Constant),
+                ("1e3", Number),
+                ("return", KeywordControl),
+            ],
+        );
+    }
+
     #[test]
     fn new_languages_are_lossless_and_lit() {
         let r = reg();

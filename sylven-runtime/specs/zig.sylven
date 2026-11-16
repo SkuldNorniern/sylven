@@ -94,6 +94,8 @@ tokens {
 highlight {
   token ident after "fn" -> function
   token ident before "(" -> function
+  token ident after "." -> property
+  token ident upper -> constant
   token control       -> keyword.control
   token keyword       -> keyword
   token builtin.type  -> type

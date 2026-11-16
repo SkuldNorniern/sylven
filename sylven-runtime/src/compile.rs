@@ -568,6 +568,9 @@ fn parse_highlight_kind(scope: &str) -> Option<HighlightKind> {
         "keyword.control" => return Some(HighlightKind::KeywordControl),
         "lifetime" => return Some(HighlightKind::Lifetime),
         "section" | "heading" => return Some(HighlightKind::SectionHeader),
+        "constant" | "variable.constant" => return Some(HighlightKind::Constant),
+        "property" | "variable.property" => return Some(HighlightKind::Property),
+        "namespace" | "module" => return Some(HighlightKind::Namespace),
         _ => {}
     }
     let base = scope.split('.').next().unwrap_or(scope);

@@ -94,7 +94,10 @@ highlight {
   token ident after "class" -> type
   token ident after "extends" -> type
   token ident after "new" -> type
+  token ident after "@" -> attribute
   token ident before "(" -> function
+  token ident after "." -> property
+  token ident upper -> constant
   token ident capitalized -> type
   token control       -> keyword.control
   token keyword       -> keyword

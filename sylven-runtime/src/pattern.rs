@@ -24,12 +24,37 @@ pub enum Pattern {
     IdentDash,
     /// `0x` then hex digits.
     Hex,
+    /// A lifetime or label: `'a`, but not the char `'a'`.
+    Lifetime,
     /// ASCII whitespace run: `[ \t\r\n]+`.
     Whitespace,
     /// A line comment: everything from `prefix` to the next `\n` (exclusive).
     LineComment(String),
     /// A block comment delimited by `open` … `close`.
     BlockComment(String, String),
+}
+
+/// how much of `rest` a number's tail takes: an exponent (`e-3`) and then a
+/// suffix of letters and digits (`u8`, `f32`, `UL`).
+fn suffix(rest: &[u8]) -> usize {
+    let mut i = 0;
+    if matches!(rest.first(), Some(b'e' | b'E')) {
+        let sign = usize::from(matches!(rest.get(1), Some(b'+' | b'-')));
+        let digits = rest[1 + sign..]
+            .iter()
+            .take_while(|c| c.is_ascii_digit())
+            .count();
+        if digits > 0 {
+            i = 1 + sign + digits;
+        }
+    }
+    if rest.get(i).is_some_and(u8::is_ascii_alphabetic) {
+        i += rest[i..]
+            .iter()
+            .take_while(|c| c.is_ascii_alphanumeric() || **c == b'_')
+            .count();
+    }
+    i
 }
 
 impl Pattern {
@@ -69,8 +94,30 @@ impl Pattern {
                 Some(len)
             }
             Pattern::Digits => {
-                let len = b.iter().take_while(|c| c.is_ascii_digit()).count();
-                (len > 0).then_some(len)
+                if !b.first().is_some_and(u8::is_ascii_digit) {
+                    return None;
+                }
+                // `1_000`, then a suffix or exponent run on: `10u8`, `1e9`, `10UL`
+                let len = b
+                    .iter()
+                    .take_while(|c| c.is_ascii_digit() || **c == b'_')
+                    .count();
+                Some(len + suffix(&b[len..]))
+            }
+            Pattern::Lifetime => {
+                if b.first() != Some(&b'\'') {
+                    return None;
+                }
+                let first = *b.get(1)?;
+                if !first.is_ascii_alphabetic() && first != b'_' {
+                    return None;
+                }
+                let len = 1 + b[1..]
+                    .iter()
+                    .take_while(|c| c.is_ascii_alphanumeric() || **c == b'_')
+                    .count();
+                // `'a'` is a char
+                (b.get(len) != Some(&b'\'')).then_some(len)
             }
             Pattern::Float => {
                 let int_part = b.iter().take_while(|c| c.is_ascii_digit()).count();
@@ -82,12 +129,13 @@ impl Pattern {
                 }
                 let frac_part = b[int_part + 1..]
                     .iter()
-                    .take_while(|c| c.is_ascii_digit())
+                    .take_while(|c| c.is_ascii_digit() || **c == b'_')
                     .count();
-                if frac_part == 0 {
+                if frac_part == 0 || !b[int_part + 1].is_ascii_digit() {
                     return None;
                 }
-                Some(int_part + 1 + frac_part)
+                let len = int_part + 1 + frac_part;
+                Some(len + suffix(&b[len..]))
             }
             Pattern::QuotedStr(delim) => {
                 if b.first() != Some(delim) {
@@ -179,6 +227,9 @@ impl Pattern {
         if pat.starts_with('"') || pat.contains(r#"([^"\\]"#) {
             return Pattern::QuotedStr(b'"');
         }
+        if pat.starts_with("'[a-zA-Z") {
+            return Pattern::Lifetime;
+        }
         if pat.starts_with('\'') || pat.contains("([^'\\\\]") {
             return Pattern::QuotedStr(b'\'');
         }
@@ -265,6 +316,24 @@ mod tests {
         assert_eq!(p.match_at(r#""hello" rest"#), Some(7));
         assert_eq!(p.match_at(r#""a\"b" rest"#), Some(6));
         assert_eq!(p.match_at("'nope'"), None);
+    }
+
+    #[test]
+    fn numbers_take_their_tails_and_lifetimes_stop_short_of_chars() {
+        assert_eq!(Pattern::Digits.match_at("1_000u32;"), Some(8));
+        assert_eq!(Pattern::Digits.match_at("1e-9 x"), Some(4));
+        assert_eq!(Pattern::Digits.match_at("10UL)"), Some(4));
+        assert_eq!(Pattern::Digits.match_at("0..5"), Some(1));
+        assert_eq!(Pattern::Float.match_at("1.5f32 x"), Some(6));
+        assert_eq!(Pattern::Float.match_at("2.0e10,"), Some(6));
+        assert_eq!(Pattern::Float.match_at("1._5"), None);
+        assert_eq!(Pattern::Lifetime.match_at("'a>"), Some(2));
+        assert_eq!(Pattern::Lifetime.match_at("'static str"), Some(7));
+        assert_eq!(Pattern::Lifetime.match_at("'a'"), None, "a char");
+        assert!(matches!(
+            Pattern::from_regex("'[a-zA-Z_][a-zA-Z0-9_]*"),
+            Pattern::Lifetime
+        ));
     }
 
     #[test]

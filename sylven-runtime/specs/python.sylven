@@ -15,7 +15,9 @@ tokens {
     "def", "del", "from", "global", "import", "in", "is", "lambda",
     "nonlocal", "not", "or"
   ]
+  self.lit      ["self", "cls"]
   ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  hex           /0x[0-9a-fA-F_]+/
   float         /[0-9]+\.[0-9]+/
   int           /[0-9]+/
   string        /"([^"\\]|\\.)*"/
@@ -71,10 +73,15 @@ tokens {
 highlight {
   token ident after "def" -> function
   token ident after "class" -> type
+  token ident after "@" -> attribute
   token ident before "(" -> function
+  token ident after "." -> property
+  token ident upper -> constant
   token ident capitalized -> type
   token control      -> keyword.control
   token keyword      -> keyword
+  token self.lit     -> variable
+  token hex          -> number
   token string       -> string
   token string.sq    -> string
   token float        -> number
