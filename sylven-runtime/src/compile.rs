@@ -10,8 +10,6 @@ use sylven_dsl::{
 
 use crate::pattern::Pattern;
 
-/// The compiled form of a `SylvenSpec` — ready for the runtime executor to
-/// use without re-parsing the DSL source on every parse call.
 /// A highlight that holds only when its conditions do.
 #[derive(Debug, Clone)]
 pub struct ContextHighlight {
@@ -19,6 +17,9 @@ pub struct ContextHighlight {
     pub when: Vec<HighlightCond>,
     pub kind: HighlightKind,
 }
+
+/// The compiled form of a `SylvenSpec` — ready for the runtime executor to
+/// use without re-parsing the DSL source on every parse call.
 
 #[derive(Debug, Clone)]
 pub struct CompiledSpec {

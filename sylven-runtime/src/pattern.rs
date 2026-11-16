@@ -45,7 +45,12 @@ impl Pattern {
                         // Keyword must not be a prefix of a longer ident.
                         let after = &b[kw.len()..];
                         let next = after.first().copied().unwrap_or(0);
-                        if !next.is_ascii_alphanumeric() && next != b'_' {
+                        // `auto-fit` is one name, not `auto` then `-fit`
+                        let dashed = next == b'-'
+                            && after
+                                .get(1)
+                                .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_');
+                        if !next.is_ascii_alphanumeric() && next != b'_' && !dashed {
                             return Some(kw.len());
                         }
                     }
@@ -229,6 +234,9 @@ mod tests {
         assert_eq!(kw.match_at("fn main"), Some(2));
         assert_eq!(kw.match_at("fnx"), None); // prefix of identifier
         assert_eq!(kw.match_at("let x"), Some(3));
+        assert_eq!(kw.match_at("let-x"), None, "a dashed name");
+        assert_eq!(kw.match_at("let-1"), Some(3));
+        assert_eq!(kw.match_at("let--"), Some(3));
     }
 
     #[test]
