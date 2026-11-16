@@ -134,6 +134,9 @@ pub enum HighlightCond {
     After(String),
     /// `capitalized`: the token's text starts with an ASCII capital.
     Capitalized,
+    /// `upper`: two or more chars, all capitals, digits or `_`, one capital
+    /// at least: `MAX_LEN`.
+    Upper,
 }
 
 #[derive(Debug, Clone)]

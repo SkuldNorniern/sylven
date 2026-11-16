@@ -532,6 +532,9 @@ impl Parser {
                     } else if self.at_word("capitalized") {
                         self.advance();
                         when.push(HighlightCond::Capitalized);
+                    } else if self.at_word("upper") {
+                        self.advance();
+                        when.push(HighlightCond::Upper);
                     } else {
                         break;
                     }
