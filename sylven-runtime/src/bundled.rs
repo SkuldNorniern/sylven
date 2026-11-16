@@ -866,55 +866,148 @@ mod tests {
         );
     }
 
-    #[test]
-    fn small_edits_match_full_parse_in_runtime_languages() {
+    /// what the edit tests type at every cut: all of it for a few languages,
+    /// a few for the rest, so the run stays short.
+    const EVERY: &[&str] = &["(", ")", "{", "\"", "x", "\n", "\r\n"];
+    const LIGHT: &[&str] = &["(", "\"", "\n"];
+
+    /// every one char insert and delete at every cut of `src` parses on
+    /// to the same tree, errors and features as a full parse.
+    fn check_small_edits(lang: &'static str, src: &str, inserts: &[&str]) {
         use sylven::SyntaxSession;
         use sylven_text::{TextEdit, TextRange, TextSize};
-        let cases = [
-            (
-                "c",
-                "int f(int a) {\n  return a; /* x */\n}\nint g() { return \"s\"; }\n",
-            ),
-            (
-                "python",
-                "def f(a):\n    return [a, \"가\"]\n\nclass B:\n    pass\n",
-            ),
-            (
-                "verilog",
-                "module m(input a);\n  assign b = (a);\nendmodule\n",
-            ),
-        ];
         let snap =
             |t: &str| sylven::TextSnapshot::new(sylven::DocumentId(0), sylven::RevisionId(0), t);
+        let cuts: Vec<usize> = (0..=src.len())
+            .filter(|&i| src.is_char_boundary(i))
+            .collect();
+        let mut edits = Vec::new();
+        for &insert in inserts {
+            for &at in &cuts {
+                edits.push(TextEdit::insert(TextSize::from(at as u32), insert));
+            }
+        }
+        for pair in cuts.windows(2) {
+            let range = TextRange::new(
+                TextSize::from(pair[0] as u32),
+                TextSize::from(pair[1] as u32),
+            );
+            edits.push(TextEdit::replace(range, ""));
+        }
+        for edit in edits {
+            let mut s = SyntaxSession::new(engine(), LanguageId(lang));
+            s.parse(snap(src)).unwrap();
+            let new_src = edit.apply(src);
+            let got = s.parse_edit(&edit, snap(&new_src)).unwrap().clone();
+            let mut full = SyntaxSession::new(engine(), LanguageId(lang));
+            let want = full.parse(snap(&new_src)).unwrap();
+            let at = format!("{lang} {src:?} {edit:?}");
+            assert_eq!(got.tree.green(), want.tree.green(), "tree at {at}");
+            assert_eq!(got.errors, want.errors, "errors at {at}");
+            assert_eq!(got.features, want.features, "features at {at}");
+        }
+    }
+
+    #[test]
+    fn small_edits_match_full_parse_in_runtime_languages() {
+        check_small_edits(
+            "c",
+            "int f(int a) {\n  return a; /* x */\n}\nint g() { return \"s\"; }\n",
+            EVERY,
+        );
+        check_small_edits(
+            "python",
+            "def f(a):\n    return [a, \"가\"]\n\nclass B:\n    pass\n",
+            EVERY,
+        );
+        check_small_edits(
+            "verilog",
+            "module m(input a);\n  assign b = (a);\nendmodule\n",
+            EVERY,
+        );
+    }
+
+    #[test]
+    fn small_edits_match_full_parse_in_every_runtime_language() {
+        let cases: [(&'static str, &str); 26] = [
+            (
+                "rust",
+                "fn f(a: &str) -> u8 { // c\n    let s = \"x\"; (a) }\n",
+            ),
+            (
+                "oxygen",
+                "// c\nfn f(a: int) -> int { let s = \"x\"; (a) }\n",
+            ),
+            (
+                "systemverilog",
+                "// c\nmodule m(input a);\n  string s = \"x\"; assign b = (a);\nendmodule\n",
+            ),
+            (
+                "vhdl",
+                "-- c\nentity e is port (a : in string := \"x\"); end;\n",
+            ),
+            (
+                "bsv",
+                "// c\nmodule m;\n  String s = \"x\"; Reg r = (1);\nendmodule\n",
+            ),
+            ("bh", "-- c\n{- b -}\nmodule m (a :: Integer) = (\"x\")\n"),
+            ("sdc", "# c\nset_false_path -from [get_ports a] -to \"x\"\n"),
+            (
+                "javascript",
+                "// c\nconst s = `x${(1)}`; function f(a) { return [a, \"s\"]; }\n",
+            ),
+            (
+                "typescript",
+                "interface S { a(): number }\nconst s: S = { b: \"x\" }; // c\n",
+            ),
+            (
+                "go",
+                "package main\nfunc f(a int) int { s := \"x\"; return a } // c\n",
+            ),
+            (
+                "java",
+                "class A { /* c */ void f() { int[] s = {(1)}; String t = \"x\"; } }\n",
+            ),
+            ("kotlin", "// c\nfun f(a: Int) { val s = \"x\" + (a) }\n"),
+            ("csharp", "// c\nclass A { string F() { return \"x\"; } }\n"),
+            (
+                "cpp",
+                "// c\nint f(int a) { const char* s = \"x\"; return (a); }\n",
+            ),
+            (
+                "swift",
+                "// c\nfunc f(a: Int) -> Int { let s = \"x\"; return (a) }\n",
+            ),
+            (
+                "lua",
+                "-- c\nlocal function f(a) local s = \"x\" return (a) end\n",
+            ),
+            ("ruby", "# c\ndef f(a)\n  s = \"x\"; [a, (1)]\nend\n"),
+            (
+                "php",
+                "<?php // c\nfunction f($a) { $s = \"x\"; return [$a]; }\n",
+            ),
+            ("shell", "# c\nf() { s=\"x\"; [ -f \"$1\" ] && echo $s; }\n"),
+            (
+                "powershell",
+                "function F([int]$a) { $s = \"x\"; @($a) } # c\n",
+            ),
+            ("css", "/* c */\n.a { color: red; } p > a[href=\"x\"] {}\n"),
+            ("html", "<!-- c -->\n<p class=\"x\">(a)</p>\n"),
+            ("xml", "<!-- c -->\n<a id=\"x\"><b/></a>\n"),
+            ("sql", "-- c\nSELECT name, 'x' FROM users WHERE (id) = 1;\n"),
+            ("ini", "; c\n[core]\nname = \"x\"\n"),
+            (
+                "zig",
+                "// c\npub fn main() void { const s = \"x\"; _ = (1); }\n",
+            ),
+        ];
+        // the list can't drift from what is registered
+        for id in NEW_LANGS {
+            assert!(cases.iter().any(|(l, _)| *l == id), "{id} has no sample");
+        }
         for (lang, src) in cases {
-            let cuts: Vec<usize> = (0..=src.len())
-                .filter(|&i| src.is_char_boundary(i))
-                .collect();
-            let mut edits = Vec::new();
-            for insert in ["(", ")", "{", "\"", "x", "\n", "\r\n"] {
-                for &at in &cuts {
-                    edits.push(TextEdit::insert(TextSize::from(at as u32), insert));
-                }
-            }
-            for pair in cuts.windows(2) {
-                let range = TextRange::new(
-                    TextSize::from(pair[0] as u32),
-                    TextSize::from(pair[1] as u32),
-                );
-                edits.push(TextEdit::replace(range, ""));
-            }
-            for edit in edits {
-                let mut s = SyntaxSession::new(engine(), LanguageId(lang));
-                s.parse(snap(src)).unwrap();
-                let new_src = edit.apply(src);
-                let got = s.parse_edit(&edit, snap(&new_src)).unwrap().clone();
-                let mut full = SyntaxSession::new(engine(), LanguageId(lang));
-                let want = full.parse(snap(&new_src)).unwrap();
-                let at = format!("{lang} {src:?} {edit:?}");
-                assert_eq!(got.tree.green(), want.tree.green(), "tree at {at}");
-                assert_eq!(got.errors, want.errors, "errors at {at}");
-                assert_eq!(got.features, want.features, "features at {at}");
-            }
+            check_small_edits(lang, src, LIGHT);
         }
     }
 }
