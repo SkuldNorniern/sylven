@@ -61,7 +61,7 @@ impl LanguagePlugin for RuntimePlugin {
             parser.finish_node();
         } else {
             // Grammar-driven tree: root is the first declared node.
-            grammar_parse_node(&mut parser, &self.spec, 0, source);
+            grammar_parse_node(&mut parser, &self.spec, 0, source, true);
         }
         let events = parser.finish();
         let (tree, errors) = build_tree(tokens, source, events);
@@ -82,7 +82,15 @@ impl LanguagePlugin for RuntimePlugin {
 
 /// Parse a single grammar node (by index into `spec.nodes`), emitting
 /// `start_node` / items / `finish_node` events into `parser`.
-fn grammar_parse_node(parser: &mut Parser, spec: &CompiledSpec, node_idx: usize, source: &str) {
+/// `root` takes whatever the grammar left, and the trivia at the end, so
+/// the tree always holds the whole source.
+fn grammar_parse_node(
+    parser: &mut Parser,
+    spec: &CompiledSpec,
+    node_idx: usize,
+    source: &str,
+    root: bool,
+) {
     let kind = spec.nodes[node_idx].kind;
     // Clone the rule to avoid holding a reference into spec while we mutate parser.
     let rule = spec.nodes[node_idx].rule.clone();
@@ -93,6 +101,12 @@ fn grammar_parse_node(parser: &mut Parser, spec: &CompiledSpec, node_idx: usize,
                 grammar_execute_item(parser, spec, item, source);
             }
         }
+    }
+    if root {
+        while !parser.at_eof() {
+            parser.bump();
+        }
+        parser.eat_trailing_trivia();
     }
     parser.finish_node();
 }
@@ -115,7 +129,7 @@ fn grammar_execute_item(
             }
         }
         CompiledItem::Node(idx) => {
-            grammar_parse_node(parser, spec, *idx, source);
+            grammar_parse_node(parser, spec, *idx, source, false);
         }
         CompiledItem::Choice(alts) => {
             let cur_kind = parser.current();
@@ -125,7 +139,7 @@ fn grammar_execute_item(
                 .copied()
                 .find(|&alt| first_tokens_match(&spec.nodes[alt].first_tokens, cur_kind, cur_text));
             if let Some(alt) = matched {
-                grammar_parse_node(parser, spec, alt, source);
+                grammar_parse_node(parser, spec, alt, source, false);
             } else if !parser.at_eof() {
                 parser.error("unexpected token");
                 parser.bump();
@@ -593,6 +607,18 @@ symbols {
         let src = "fn foo() { let x = y; }";
         let result = make_grammar_plugin().parse(&snap(src));
         assert_eq!(result.tree.text(), src);
+    }
+
+    #[test]
+    fn grammar_parse_keeps_the_end_of_the_file() {
+        let plugin = make_grammar_plugin();
+        for src in [
+            "fn foo() {}\n",
+            "fn foo() {}\n\n  ",
+            "fn foo() {} ) ] stray\n",
+        ] {
+            assert_eq!(plugin.parse(&snap(src)).tree.text(), src, "{src:?}");
+        }
     }
 
     #[test]
