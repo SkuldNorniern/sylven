@@ -1,0 +1,117 @@
+language {
+  id "sql"
+  extensions [".sql"]
+  comment.line "--"
+  comment.block "/*" "*/"
+}
+
+tokens {
+  keyword [
+    "select", "from", "where", "insert", "into", "values", "update", "set", "delete", "create",
+    "table", "view", "index", "drop", "alter", "add", "column", "primary", "key", "foreign",
+    "references", "join", "inner", "left", "right", "outer", "full", "cross", "on", "as",
+    "and", "or", "not", "in", "is", "like", "between", "exists", "group", "by", "order",
+    "having", "limit", "offset", "union", "all", "distinct", "case", "when", "then", "else",
+    "end", "begin", "commit", "rollback", "transaction", "with", "returning", "default",
+    "unique", "check", "constraint", "asc", "desc", "if", "SELECT", "FROM", "WHERE", "INSERT",
+    "INTO", "VALUES", "UPDATE", "SET", "DELETE", "CREATE", "TABLE", "VIEW", "INDEX", "DROP",
+    "ALTER", "ADD", "COLUMN", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "JOIN", "INNER",
+    "LEFT", "RIGHT", "OUTER", "FULL", "CROSS", "ON", "AS", "AND", "OR", "NOT", "IN", "IS",
+    "LIKE", "BETWEEN", "EXISTS", "GROUP", "BY", "ORDER", "HAVING", "LIMIT", "OFFSET", "UNION",
+    "ALL", "DISTINCT", "CASE", "WHEN", "THEN", "ELSE", "END", "BEGIN", "COMMIT", "ROLLBACK",
+    "TRANSACTION", "WITH", "RETURNING", "DEFAULT", "UNIQUE", "CHECK", "CONSTRAINT", "ASC",
+    "DESC", "IF"
+  ]
+  builtin.type [
+    "int", "integer", "bigint", "smallint", "text", "varchar", "char", "boolean", "date",
+    "timestamp", "real", "float", "double", "numeric", "decimal", "blob", "serial", "INT",
+    "INTEGER", "BIGINT", "TEXT", "VARCHAR", "CHAR", "BOOLEAN", "DATE", "TIMESTAMP", "REAL",
+    "FLOAT", "NUMERIC", "DECIMAL", "BLOB", "SERIAL"
+  ]
+  const.lit [
+    "true", "false", "null", "TRUE", "FALSE", "NULL"
+  ]
+  block.comment "/*" to "*/"
+  line.comment  "--" to newline
+  ident         /[a-zA-Z_][a-zA-Z0-9_]*/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  char.lit      /'([^'\\]|\\.)*'/
+  string        /"([^"\\]|\\.)*"/
+  whitespace    /\s+/ trivia
+  "==="  eqeqeq
+  "!=="  neqeq
+  ">>="  shreq
+  "<<="  shleq
+  "..."  ellipsis
+  "**="  powreq
+  "??="  nulleq
+  "=>"   fatarrow
+  "->"   arrow
+  "::"   coloncolon
+  "=="   eqeq
+  "!="   ne
+  "<="   le
+  ">="   ge
+  "<<"   shl
+  ">>"   shr
+  "++"   inc
+  "--"   dec
+  "+="   pluseq
+  "-="   minuseq
+  "*="   stareq
+  "/="   slasheq
+  "%="   percenteq
+  "&="   ampeq
+  "|="   pipeq
+  "^="   careteq
+  "&&"   andand
+  "||"   oror
+  "??"   nullish
+  "?."   optchain
+  "**"   pow
+  "("    lparen
+  ")"    rparen
+  "{"    lbrace
+  "}"    rbrace
+  "["    lbracket
+  "]"    rbracket
+  "+"    plus
+  "-"    minus
+  "*"    star
+  "/"    slash
+  "%"    percent
+  "&"    amp
+  "|"    pipe
+  "^"    caret
+  "!"    bang
+  "~"    tilde
+  "<"    lt
+  ">"    gt
+  "="    eq
+  "?"    question
+  "."    dot
+  ":"    colon
+  ";"    semicolon
+  ","    comma
+  "#"    hash
+  "@"    at
+  "$"    dollar
+  "\\"    backslash
+}
+
+highlight {
+  token keyword       -> keyword
+  token builtin.type  -> type
+  token const.lit     -> number
+  token char.lit      -> string
+  token string        -> string
+  token float         -> number
+  token int           -> number
+  token line.comment  -> comment
+  token block.comment -> comment
+}
+
+fold {
+  Block when multiline
+}

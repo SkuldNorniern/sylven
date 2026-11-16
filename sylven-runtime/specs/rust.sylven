@@ -6,13 +6,15 @@ language {
 }
 
 tokens {
+  control [
+    "await", "break", "continue", "else", "for", "if", "loop", "match",
+    "return", "while"
+  ]
   keyword [
-    "as", "async", "await", "break", "const", "continue", "crate",
-    "dyn", "else", "enum", "extern", "false", "fn", "for", "if",
-    "impl", "in", "let", "loop", "match", "mod", "move", "mut",
-    "pub", "ref", "return", "self", "Self", "static", "struct",
-    "super", "trait", "true", "type", "union", "unsafe", "use",
-    "where", "while"
+    "as", "async", "const", "crate", "dyn", "enum", "extern", "false",
+    "fn", "impl", "in", "let", "mod", "move", "mut", "pub", "ref",
+    "self", "Self", "static", "struct", "super", "trait", "true",
+    "type", "union", "unsafe", "use", "where"
   ]
   prim.type [
     "bool", "char", "f32", "f64", "i8", "i16", "i32", "i64",
@@ -77,6 +79,15 @@ tokens {
 }
 
 highlight {
+  token ident after "fn" -> function
+  token ident after "struct" -> type
+  token ident after "enum" -> type
+  token ident after "trait" -> type
+  token ident after "type" -> type
+  token ident before "!" -> macro
+  token ident before "(" -> function
+  token ident capitalized -> type
+  token control      -> keyword.control
   token keyword      -> keyword
   token prim.type    -> type
   token string       -> string

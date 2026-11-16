@@ -1,0 +1,111 @@
+language {
+  id "powershell"
+  extensions [".ps1", ".psm1", ".psd1"]
+  comment.line "#"
+  comment.block "<#" "#>"
+}
+
+tokens {
+  control [
+    "if", "elseif", "else", "switch", "foreach", "for", "while", "do", "until", "break",
+    "continue", "return", "try", "catch", "finally", "throw", "trap", "exit"
+  ]
+  keyword [
+    "function", "filter", "param", "begin", "process", "end", "class", "enum", "using",
+    "module", "in", "Function", "Param", "If", "Else", "ForEach", "Return"
+  ]
+  const.lit [
+    "$true", "$false", "$null"
+  ]
+  block.comment "<#" to "#>"
+  line.comment  "#" to newline
+  sigil0.var     /\$[a-zA-Z_][a-zA-Z0-9_]*/
+  ident         /[a-zA-Z_-][a-zA-Z0-9_-]*/
+  hex           /0x[0-9a-fA-F_]+/
+  float         /[0-9]+\.[0-9]+/
+  int           /[0-9]+/
+  string        /"([^"\\]|\\.)*"/
+  char.lit      /'([^'\\]|\\.)*'/
+  whitespace    /\s+/ trivia
+  "==="  eqeqeq
+  "!=="  neqeq
+  ">>="  shreq
+  "<<="  shleq
+  "..."  ellipsis
+  "**="  powreq
+  "??="  nulleq
+  "=>"   fatarrow
+  "->"   arrow
+  "::"   coloncolon
+  "=="   eqeq
+  "!="   ne
+  "<="   le
+  ">="   ge
+  "<<"   shl
+  ">>"   shr
+  "++"   inc
+  "--"   dec
+  "+="   pluseq
+  "-="   minuseq
+  "*="   stareq
+  "/="   slasheq
+  "%="   percenteq
+  "&="   ampeq
+  "|="   pipeq
+  "^="   careteq
+  "&&"   andand
+  "||"   oror
+  "??"   nullish
+  "?."   optchain
+  "**"   pow
+  "("    lparen
+  ")"    rparen
+  "{"    lbrace
+  "}"    rbrace
+  "["    lbracket
+  "]"    rbracket
+  "+"    plus
+  "-"    minus
+  "*"    star
+  "/"    slash
+  "%"    percent
+  "&"    amp
+  "|"    pipe
+  "^"    caret
+  "!"    bang
+  "~"    tilde
+  "<"    lt
+  ">"    gt
+  "="    eq
+  "?"    question
+  "."    dot
+  ":"    colon
+  ";"    semicolon
+  ","    comma
+  "#"    hash
+  "@"    at
+  "$"    dollar
+  "\\"    backslash
+}
+
+highlight {
+  token ident after "function" -> function
+  token ident after "Function" -> function
+  token ident before "(" -> function
+  token ident capitalized -> function
+  token control       -> keyword.control
+  token keyword       -> keyword
+  token const.lit     -> number
+  token sigil0.var    -> variable
+  token string        -> string
+  token char.lit      -> string
+  token hex           -> number
+  token float         -> number
+  token int           -> number
+  token line.comment  -> comment
+  token block.comment -> comment
+}
+
+fold {
+  Block when multiline
+}

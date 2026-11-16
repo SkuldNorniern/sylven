@@ -14,9 +14,29 @@ const VHDL_SPEC: &str = include_str!("../specs/vhdl.sylven");
 const BSV_SPEC: &str = include_str!("../specs/bsv.sylven");
 const BH_SPEC: &str = include_str!("../specs/bh.sylven");
 const SDC_SPEC: &str = include_str!("../specs/sdc.sylven");
+const JAVASCRIPT_SPEC: &str = include_str!("../specs/javascript.sylven");
+const TYPESCRIPT_SPEC: &str = include_str!("../specs/typescript.sylven");
+const GO_SPEC: &str = include_str!("../specs/go.sylven");
+const JAVA_SPEC: &str = include_str!("../specs/java.sylven");
+const KOTLIN_SPEC: &str = include_str!("../specs/kotlin.sylven");
+const CSHARP_SPEC: &str = include_str!("../specs/csharp.sylven");
+const CPP_SPEC: &str = include_str!("../specs/cpp.sylven");
+const SWIFT_SPEC: &str = include_str!("../specs/swift.sylven");
+const LUA_SPEC: &str = include_str!("../specs/lua.sylven");
+const RUBY_SPEC: &str = include_str!("../specs/ruby.sylven");
+const PHP_SPEC: &str = include_str!("../specs/php.sylven");
+const SHELL_SPEC: &str = include_str!("../specs/shell.sylven");
+const POWERSHELL_SPEC: &str = include_str!("../specs/powershell.sylven");
+const CSS_SPEC: &str = include_str!("../specs/css.sylven");
+const HTML_SPEC: &str = include_str!("../specs/html.sylven");
+const XML_SPEC: &str = include_str!("../specs/xml.sylven");
+const SQL_SPEC: &str = include_str!("../specs/sql.sylven");
+const INI_SPEC: &str = include_str!("../specs/ini.sylven");
+const ZIG_SPEC: &str = include_str!("../specs/zig.sylven");
 
 /// Register the bundled DSL-based language plugins (Rust, C, Python, Oxygen,
-/// Verilog, SystemVerilog, VHDL, BSV, Bluespec Haskell, SDC/XDC) into
+/// Verilog, SystemVerilog, VHDL, BSV, Bluespec Haskell, SDC/XDC, and the
+/// common languages of the web, apps and systems) into
 /// `registry`. Existing plugins with the same `LanguageId` are replaced.
 pub fn register_bundled(registry: &mut LanguageRegistry) {
     for spec_src in [
@@ -30,6 +50,25 @@ pub fn register_bundled(registry: &mut LanguageRegistry) {
         BSV_SPEC,
         BH_SPEC,
         SDC_SPEC,
+        JAVASCRIPT_SPEC,
+        TYPESCRIPT_SPEC,
+        GO_SPEC,
+        JAVA_SPEC,
+        KOTLIN_SPEC,
+        CSHARP_SPEC,
+        CPP_SPEC,
+        SWIFT_SPEC,
+        LUA_SPEC,
+        RUBY_SPEC,
+        PHP_SPEC,
+        SHELL_SPEC,
+        POWERSHELL_SPEC,
+        CSS_SPEC,
+        HTML_SPEC,
+        XML_SPEC,
+        SQL_SPEC,
+        INI_SPEC,
+        ZIG_SPEC,
     ] {
         match sylven_dsl::parse_spec(spec_src) {
             Ok(spec) => {
@@ -141,6 +180,225 @@ mod tests {
         assert!(r.contains(LanguageId("bsv")));
         assert!(r.contains(LanguageId("bh")));
         assert!(r.contains(LanguageId("sdc")));
+        for id in NEW_LANGS {
+            assert!(r.contains(LanguageId(id)), "{id}");
+        }
+    }
+
+    /// the languages added with the table generator, a sample each, and a
+    /// word in it with the kind it should have.
+    const NEW_LANGS: [&str; 19] = [
+        "javascript",
+        "typescript",
+        "go",
+        "java",
+        "kotlin",
+        "csharp",
+        "cpp",
+        "swift",
+        "lua",
+        "ruby",
+        "php",
+        "shell",
+        "powershell",
+        "css",
+        "html",
+        "xml",
+        "sql",
+        "ini",
+        "zig",
+    ];
+
+    fn sample(id: &str) -> (&'static str, &'static [(&'static str, HighlightKind)]) {
+        use HighlightKind::{
+            Attribute, Comment, Function, Keyword, KeywordControl, Number, SectionHeader, String,
+            Type, Variable,
+        };
+        match id {
+            "javascript" => (
+                "// c\nclass Box extends Base {}\nfunction run(a) { return `t${a}` + 0x1f; }\n",
+                &[
+                    ("// c", Comment),
+                    ("Box", Type),
+                    ("run", Function),
+                    ("return", KeywordControl),
+                    ("`t${a}`", String),
+                    ("0x1f", Number),
+                    ("class", Keyword),
+                ],
+            ),
+            "typescript" => (
+                "interface Shape { area(): number }\nconst s: Shape = make();\n",
+                &[
+                    ("Shape", Type),
+                    ("number", Type),
+                    ("make", Function),
+                    ("const", Keyword),
+                ],
+            ),
+            "go" => (
+                "package main\nfunc add(a int) int { return a }\ntype Point struct{}\n",
+                &[
+                    ("add", Function),
+                    ("int", Type),
+                    ("return", KeywordControl),
+                    ("Point", Type),
+                ],
+            ),
+            "java" => (
+                "public class App { void run() { if (x) return; } }\n",
+                &[
+                    ("App", Type),
+                    ("run", Function),
+                    ("if", KeywordControl),
+                    ("void", Type),
+                ],
+            ),
+            "kotlin" => (
+                "fun main() { val x: Int = 1 }\n",
+                &[("main", Function), ("Int", Type), ("val", Keyword)],
+            ),
+            "csharp" => (
+                "namespace A { class B { string C() { return \"d\"; } } }\n",
+                &[
+                    ("B", Type),
+                    ("C", Function),
+                    ("string", Type),
+                    ("\"d\"", String),
+                ],
+            ),
+            "cpp" => (
+                "template <typename T> struct Vec { int size() const; };\n",
+                &[
+                    ("T", Type),
+                    ("Vec", Type),
+                    ("size", Function),
+                    ("template", Keyword),
+                ],
+            ),
+            "swift" => (
+                "struct P { func go() -> Int { guard x else { return 1 } } }\n",
+                &[("P", Type), ("go", Function), ("guard", KeywordControl)],
+            ),
+            "lua" => (
+                "-- c\nlocal function f(a) if a then return nil end end\n",
+                &[
+                    ("-- c", Comment),
+                    ("f", Function),
+                    ("then", KeywordControl),
+                    ("nil", Number),
+                ],
+            ),
+            "ruby" => (
+                "class Dog\n  def bark\n    @name\n  end\nend\n",
+                &[("Dog", Type), ("bark", Function), ("@name", Variable)],
+            ),
+            "php" => (
+                "<?php function f($a) { return $a; } # c\n",
+                &[("f", Function), ("$a", Variable), ("# c", Comment)],
+            ),
+            "shell" => (
+                "# c\nfunction go { echo \"$HOME\"; }\nif true; then x=$y; fi\n",
+                &[
+                    ("# c", Comment),
+                    ("go", Function),
+                    ("if", KeywordControl),
+                    ("$y", Variable),
+                ],
+            ),
+            "powershell" => (
+                "function Get-It { param($Name) Write-Host $Name }\n",
+                &[
+                    ("Get-It", Function),
+                    ("$Name", Variable),
+                    ("Write-Host", Function),
+                ],
+            ),
+            "css" => (
+                "/* c */\n.box { font-size: 12px; }\n@media screen {}\n",
+                &[
+                    ("/* c */", Comment),
+                    ("font-size", Attribute),
+                    ("@media", Variable),
+                ],
+            ),
+            "html" => (
+                "<!-- c -->\n<div class=\"a\">x</div>\n",
+                &[
+                    ("<!-- c -->", Comment),
+                    ("div", Keyword),
+                    ("class", Attribute),
+                    ("\"a\"", String),
+                ],
+            ),
+            "xml" => (
+                "<root id=\"1\"><item/></root>\n",
+                &[("root", Keyword), ("id", Attribute), ("item", Keyword)],
+            ),
+            "sql" => (
+                "SELECT name FROM users WHERE id = 1; -- c\n",
+                &[
+                    ("SELECT", Keyword),
+                    ("FROM", Keyword),
+                    ("-- c", Comment),
+                    ("1", Number),
+                ],
+            ),
+            "ini" => (
+                "; c\n[core]\nname = value\n",
+                &[
+                    ("; c", Comment),
+                    ("core", SectionHeader),
+                    ("name", Attribute),
+                ],
+            ),
+            "zig" => (
+                "pub fn main() void { const x: u8 = @intCast(1); }\n",
+                &[
+                    ("main", Function),
+                    ("void", Type),
+                    ("@intCast", Variable),
+                    ("pub", Keyword),
+                ],
+            ),
+            _ => ("", &[]),
+        }
+    }
+
+    #[test]
+    fn new_languages_are_lossless_and_lit() {
+        let r = reg();
+        for id in NEW_LANGS {
+            let plugin = r.get(LanguageId(id)).unwrap();
+            let (src, expect) = sample(id);
+            let result = plugin.parse(&snap(src));
+            assert_eq!(result.tree.text(), src, "{id} lossless");
+            for (word, kind) in expect {
+                // the word may show inside another; any whole match will do
+                let lit = src.match_indices(word).any(|(at, _)| {
+                    result.features.highlights.iter().any(|h| {
+                        h.range.start().to_usize() == at
+                            && h.range.end().to_usize() == at + word.len()
+                            && h.kind == *kind
+                    })
+                });
+                assert!(lit, "{id}: {word} as {kind:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn new_languages_survive_broken_text() {
+        let r = reg();
+        for id in NEW_LANGS {
+            let plugin = r.get(LanguageId(id)).unwrap();
+            let (src, _) = sample(id);
+            // cut short at every char: never a panic, always the same text back
+            for end in (0..=src.len()).filter(|&i| src.is_char_boundary(i)) {
+                let part = &src[..end];
+                assert_eq!(plugin.parse(&snap(part)).tree.text(), part, "{id} at {end}");
+            }
+        }
     }
 
     #[test]
