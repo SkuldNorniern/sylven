@@ -37,6 +37,12 @@ pub(crate) struct Token {
 
 /// Tokenise a `.sylven` source string. Whitespace and `#`-comments are silently
 /// dropped. The last token is always `TK::Eof`.
+/// the char starting at byte `i`. `i` is always a char start here: the
+/// lexer only stops on ascii bytes or after a whole char.
+fn char_at(source: &str, i: usize) -> char {
+    source[i..].chars().next().unwrap_or('\u{fffd}')
+}
+
 pub(crate) fn lex(source: &str) -> Vec<Token> {
     let mut out = Vec::new();
     let bytes = source.as_bytes();
@@ -117,16 +123,21 @@ pub(crate) fn lex(source: &str) -> Vec<Token> {
                                 b'\\' => s.push('\\'),
                                 b'n' => s.push('\n'),
                                 b't' => s.push('\t'),
-                                c => {
+                                _ => {
+                                    // an unknown escape stays as written
                                     s.push('\\');
-                                    s.push(c as char);
+                                    let c = char_at(source, i);
+                                    s.push(c);
+                                    i += c.len_utf8() - 1;
                                 }
                             }
                             i += 1;
                         }
                     } else {
-                        s.push(bytes[i] as char);
-                        i += 1;
+                        // whole chars, so text past ascii comes through
+                        let c = char_at(source, i);
+                        s.push(c);
+                        i += c.len_utf8();
                     }
                 }
                 if i < bytes.len() {
@@ -139,8 +150,9 @@ pub(crate) fn lex(source: &str) -> Vec<Token> {
                 i += 1;
                 let mut s = String::new();
                 while i < bytes.len() && bytes[i] != b'/' && bytes[i] != b'\n' {
-                    s.push(bytes[i] as char);
-                    i += 1;
+                    let c = char_at(source, i);
+                    s.push(c);
+                    i += c.len_utf8();
                 }
                 if i < bytes.len() && bytes[i] == b'/' {
                     i += 1; // closing `/`
@@ -172,8 +184,9 @@ pub(crate) fn lex(source: &str) -> Vec<Token> {
                 out.push(tok(TK::Word, &w, start));
             }
             _ => {
-                out.push(tok(TK::Invalid, &(bytes[i] as char).to_string(), start));
-                i += 1;
+                let c = char_at(source, i);
+                out.push(tok(TK::Invalid, &c.to_string(), start));
+                i += c.len_utf8();
             }
         }
     }
@@ -276,5 +289,13 @@ mod tests {
     fn eof_always_last() {
         let toks = lex("foo");
         assert_eq!(toks.last().unwrap().kind, TK::Eof);
+    }
+
+    #[test]
+    fn strings_and_regexes_keep_text_past_ascii() {
+        let toks = lex("\"→λ∀\" /[α-ω]+/ ·");
+        assert_eq!(toks[0].text, "→λ∀");
+        assert_eq!(toks[1].text, "[α-ω]+");
+        assert_eq!(toks[2].text, "·");
     }
 }
