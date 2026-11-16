@@ -4,14 +4,22 @@ use sylven::{HighlightKind, SymbolKind};
 use sylven_lex::SyntaxKind;
 
 use sylven_dsl::{
-    FoldCondition, GrammarItem, HighlightSource, NodeDecl, SylvenSpec, SymbolRule, TokenDecl,
-    TokenKind,
+    FoldCondition, GrammarItem, HighlightCond, HighlightSource, NodeDecl, SylvenSpec, SymbolRule,
+    TokenDecl, TokenKind,
 };
 
 use crate::pattern::Pattern;
 
 /// The compiled form of a `SylvenSpec` — ready for the runtime executor to
 /// use without re-parsing the DSL source on every parse call.
+/// A highlight that holds only when its conditions do.
+#[derive(Debug, Clone)]
+pub struct ContextHighlight {
+    pub token: SyntaxKind,
+    pub when: Vec<HighlightCond>,
+    pub kind: HighlightKind,
+}
+
 #[derive(Debug, Clone)]
 pub struct CompiledSpec {
     /// `LanguageId` string (owned; used via `Box::leak` in `RuntimePlugin`).
@@ -22,6 +30,9 @@ pub struct CompiledSpec {
     pub file_kind: SyntaxKind,
     /// Token-level highlight rules: `SyntaxKind → HighlightKind`.
     pub highlights: HashMap<SyntaxKind, HighlightKind>,
+    /// Rules that also look at the token's neighbours, tried before
+    /// `highlights`, first match wins.
+    pub context_highlights: Vec<ContextHighlight>,
     /// Bracket pairs `(open_kind, close_kind)` — used for fold and bracket features.
     pub bracket_pairs: Vec<(SyntaxKind, SyntaxKind)>,
     /// Whether folds should be emitted for bracket pairs that span multiple lines.
@@ -131,6 +142,7 @@ pub fn compile(spec: &SylvenSpec) -> CompiledSpec {
 
     // Compile token-level highlight rules.
     let mut highlights: HashMap<SyntaxKind, HighlightKind> = HashMap::new();
+    let mut context_highlights: Vec<ContextHighlight> = Vec::new();
     for rule in &spec.highlight {
         let HighlightSource::Token(ref token_name) = rule.source else {
             continue; // NodeField rules require grammar — skip for Stage 5
@@ -138,8 +150,17 @@ pub fn compile(spec: &SylvenSpec) -> CompiledSpec {
         let Some(&kind) = name_to_kind.get(token_name.as_str()) else {
             continue;
         };
-        if let Some(hk) = parse_highlight_kind(&rule.scope) {
+        let Some(hk) = parse_highlight_kind(&rule.scope) else {
+            continue;
+        };
+        if rule.when.is_empty() {
             highlights.insert(kind, hk);
+        } else {
+            context_highlights.push(ContextHighlight {
+                token: kind,
+                when: rule.when.clone(),
+                kind: hk,
+            });
         }
     }
 
@@ -214,6 +235,7 @@ pub fn compile(spec: &SylvenSpec) -> CompiledSpec {
         matchers,
         file_kind,
         highlights,
+        context_highlights,
         bracket_pairs,
         fold_brackets,
         nodes,
@@ -540,6 +562,13 @@ fn compile_token_decl(decl: &TokenDecl, next_id: &mut u16) -> (Pattern, SyntaxKi
 }
 
 fn parse_highlight_kind(scope: &str) -> Option<HighlightKind> {
+    // a few full scopes have kinds of their own
+    match scope {
+        "keyword.control" => return Some(HighlightKind::KeywordControl),
+        "lifetime" => return Some(HighlightKind::Lifetime),
+        "section" | "heading" => return Some(HighlightKind::SectionHeader),
+        _ => {}
+    }
     let base = scope.split('.').next().unwrap_or(scope);
     Some(match base {
         "keyword" => HighlightKind::Keyword,

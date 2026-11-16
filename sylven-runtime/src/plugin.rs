@@ -5,6 +5,7 @@ use sylven_text::{TextRange, TextSize, TextSnapshot};
 use sylven_tree::{SyntaxElement, SyntaxTree};
 
 use crate::compile::{CompiledItem, CompiledRule, CompiledSpec, FirstToken};
+use sylven_dsl::HighlightCond;
 
 /// A [`LanguagePlugin`] driven entirely by a [`CompiledSpec`] — no hand-written
 /// grammar. Produces a flat FILE tree (all tokens are direct children of the
@@ -32,6 +33,12 @@ impl RuntimePlugin {
 impl LanguagePlugin for RuntimePlugin {
     fn id(&self) -> LanguageId {
         self.lang_id
+    }
+
+    /// a rule that looks at a token's neighbours can change with an edit
+    /// outside the token, so those languages always parse whole.
+    fn regional(&self) -> bool {
+        self.spec.context_highlights.is_empty()
     }
 
     fn parse(&self, snapshot: &TextSnapshot) -> ParseResult {
@@ -227,6 +234,35 @@ fn runtime_lex(source: &str, spec: &CompiledSpec) -> Vec<Token> {
 
 // ── Feature derivation ────────────────────────────────────────────────────────
 
+fn is_trivia(kind: SyntaxKind) -> bool {
+    kind == SyntaxKind::WHITESPACE || kind == SyntaxKind::COMMENT
+}
+
+fn text_of<'s>(tok: &Token, source: &'s str) -> &'s str {
+    source
+        .get(tok.range.start().to_usize()..tok.range.end().to_usize())
+        .unwrap_or("")
+}
+
+/// whether `cond` holds for the token at `i`.
+fn holds(cond: &HighlightCond, tokens: &[Token], i: usize, source: &str) -> bool {
+    match cond {
+        HighlightCond::Before(text) => tokens[i + 1..]
+            .iter()
+            .find(|t| !is_trivia(t.kind))
+            .is_some_and(|t| t.kind != SyntaxKind::EOF && text_of(t, source) == text),
+        HighlightCond::After(text) => tokens[..i]
+            .iter()
+            .rev()
+            .find(|t| !is_trivia(t.kind))
+            .is_some_and(|t| text_of(t, source) == text),
+        HighlightCond::Capitalized => text_of(&tokens[i], source)
+            .bytes()
+            .next()
+            .is_some_and(|b| b.is_ascii_uppercase()),
+    }
+}
+
 fn derive_features(tokens: &[Token], source: &str, spec: &CompiledSpec) -> SyntaxFeatures {
     let mut highlights: Vec<Highlight> = Vec::new();
     let mut brackets: Vec<(TextRange, TextRange)> = Vec::new();
@@ -241,13 +277,19 @@ fn derive_features(tokens: &[Token], source: &str, spec: &CompiledSpec) -> Synta
         .map(|&(open, _)| (open, Vec::new()))
         .collect();
 
-    for tok in tokens {
+    for (i, tok) in tokens.iter().enumerate() {
         if tok.kind == SyntaxKind::EOF {
             break;
         }
 
-        // Token-level highlights.
-        if let Some(&hk) = spec.highlights.get(&tok.kind) {
+        // Token-level highlights: the rules with conditions first.
+        let contextual = spec
+            .context_highlights
+            .iter()
+            .filter(|c| c.token == tok.kind)
+            .find(|c| c.when.iter().all(|w| holds(w, tokens, i, source)))
+            .map(|c| c.kind);
+        if let Some(hk) = contextual.or_else(|| spec.highlights.get(&tok.kind).copied()) {
             highlights.push(Highlight {
                 range: tok.range,
                 kind: hk,
@@ -339,6 +381,7 @@ fn extract_symbols(tree: &SyntaxTree, spec: &CompiledSpec) -> Vec<SymbolInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sylven::HighlightKind;
     use sylven_dsl::parse_spec;
     use sylven_text::{DocumentId, RevisionId};
 
@@ -375,6 +418,46 @@ fold { Block when multiline }
 
     fn snap(source: &str) -> TextSnapshot {
         TextSnapshot::new(DocumentId(0), RevisionId(0), source)
+    }
+
+    #[test]
+    fn rules_with_conditions_see_the_neighbours() {
+        let src = r#"
+language { id "ctx" extensions [".ctx"] }
+tokens {
+  keyword ["fn", "if"]
+  ident /[a-zA-Z_][a-zA-Z0-9_]*/
+  whitespace /\s+/ trivia
+  "(" lparen
+  ")" rparen
+}
+highlight {
+  token keyword -> keyword
+  token keyword after "(" -> keyword.control
+  token ident after "fn" -> function
+  token ident before "(" -> function
+  token ident capitalized -> type
+  token ident -> variable
+}
+"#;
+        let plugin = RuntimePlugin::new(compile(&parse_spec(src).unwrap()));
+        assert!(!plugin.regional(), "neighbours make it parse whole");
+        let text = "fn make (Point) if x";
+        let result = plugin.parse(&snap(text));
+        let kind_of = |word: &str| {
+            let at = text.find(word).unwrap() as u32;
+            result
+                .features
+                .highlights
+                .iter()
+                .find(|h| u32::from(h.range.start()) == at)
+                .map(|h| h.kind)
+        };
+        assert_eq!(kind_of("make"), Some(HighlightKind::Function), "after fn");
+        assert_eq!(kind_of("Point"), Some(HighlightKind::Type));
+        assert_eq!(kind_of("x"), Some(HighlightKind::Variable));
+        assert_eq!(kind_of("if"), Some(HighlightKind::Keyword));
+        assert!(make_plugin().regional(), "plain rules stay regional");
     }
 
     #[test]

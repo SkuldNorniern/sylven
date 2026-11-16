@@ -16,8 +16,14 @@ pub enum Pattern {
     Digits,
     /// Floating-point literal: `[0-9]+\.[0-9]+`.
     Float,
-    /// Quoted string with backslash escapes (delimiter = `"` or `'`).
+    /// Quoted string with backslash escapes (delimiter = `"`, `'` or a backtick).
     QuotedStr(u8),
+    /// A sigil then an identifier, like `$name` in shell, PHP or PowerShell.
+    Sigil(u8),
+    /// An identifier that may hold `-`, like CSS properties: `font-size`.
+    IdentDash,
+    /// `0x` then hex digits.
+    Hex,
     /// ASCII whitespace run: `[ \t\r\n]+`.
     Whitespace,
     /// A line comment: everything from `prefix` to the next `\n` (exclusive).
@@ -97,6 +103,42 @@ impl Pattern {
                 }
                 Some(i) // unterminated — consume to end
             }
+            Pattern::Sigil(sigil) => {
+                if b.first() != Some(sigil) {
+                    return None;
+                }
+                let len = b[1..]
+                    .iter()
+                    .take_while(|&&c| c.is_ascii_alphanumeric() || c == b'_')
+                    .count();
+                (len > 0).then_some(1 + len)
+            }
+            Pattern::IdentDash => {
+                let first = *b.first()?;
+                let starts = first.is_ascii_alphabetic()
+                    || first == b'_'
+                    || (first == b'-'
+                        && b.get(1)
+                            .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'-'));
+                if !starts {
+                    return None;
+                }
+                let len = 1 + b[1..]
+                    .iter()
+                    .take_while(|&&c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+                    .count();
+                Some(len)
+            }
+            Pattern::Hex => {
+                if !(src.starts_with("0x") || src.starts_with("0X")) {
+                    return None;
+                }
+                let len = b[2..]
+                    .iter()
+                    .take_while(|c| c.is_ascii_hexdigit() || **c == b'_')
+                    .count();
+                (len > 0).then_some(2 + len)
+            }
             Pattern::Whitespace => {
                 let len = b.iter().take_while(|c| c.is_ascii_whitespace()).count();
                 (len > 0).then_some(len)
@@ -134,6 +176,25 @@ impl Pattern {
         }
         if pat.starts_with('\'') || pat.contains("([^'\\\\]") {
             return Pattern::QuotedStr(b'\'');
+        }
+        if pat.starts_with('`') || pat.contains("([^`") {
+            return Pattern::QuotedStr(b'`');
+        }
+        // `\$` then an identifier class
+        if pat
+            .strip_prefix("\\$")
+            .is_some_and(|rest| rest.starts_with('['))
+        {
+            return Pattern::Sigil(b'$');
+        }
+        if pat.starts_with("@[") {
+            return Pattern::Sigil(b'@');
+        }
+        if pat.starts_with("0x") {
+            return Pattern::Hex;
+        }
+        if pat.starts_with("[a-zA-Z_-]") || pat.starts_with("[-a-zA-Z_]") {
+            return Pattern::IdentDash;
         }
         // Float before Digits (more specific)
         if pat.contains("[0-9]") && pat.contains('.') {
@@ -196,6 +257,34 @@ mod tests {
         assert_eq!(p.match_at(r#""hello" rest"#), Some(7));
         assert_eq!(p.match_at(r#""a\"b" rest"#), Some(6));
         assert_eq!(p.match_at("'nope'"), None);
+    }
+
+    #[test]
+    fn sigils_dashes_hex_and_backticks() {
+        assert_eq!(Pattern::Sigil(b'$').match_at("$HOME/x"), Some(5));
+        assert_eq!(Pattern::Sigil(b'$').match_at("$ x"), None);
+        assert_eq!(Pattern::IdentDash.match_at("font-size: 1"), Some(9));
+        assert_eq!(Pattern::IdentDash.match_at("--var x"), Some(5));
+        assert_eq!(Pattern::IdentDash.match_at("- 1"), None);
+        assert_eq!(Pattern::Hex.match_at("0xFF_00;"), Some(7));
+        assert_eq!(Pattern::Hex.match_at("0x;"), None);
+        assert_eq!(Pattern::QuotedStr(b'`').match_at("`a${b}` x"), Some(7));
+        assert!(matches!(
+            Pattern::from_regex(r"\$[a-zA-Z_][a-zA-Z0-9_]*"),
+            Pattern::Sigil(b'$')
+        ));
+        assert!(matches!(
+            Pattern::from_regex("[a-zA-Z_-][a-zA-Z0-9_-]*"),
+            Pattern::IdentDash
+        ));
+        assert!(matches!(
+            Pattern::from_regex("0x[0-9a-fA-F_]+"),
+            Pattern::Hex
+        ));
+        assert!(matches!(
+            Pattern::from_regex("`([^`\\\\]|\\\\.)*`"),
+            Pattern::QuotedStr(b'`')
+        ));
     }
 
     #[test]
